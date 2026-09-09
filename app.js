@@ -1,7 +1,6 @@
-const SHEET_ID = '1FcetqNVvNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
+const SHEET_ID = '1FcetqNVvXNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
 
-// Та же схема, что работает в Shop: один стабильный GViz-адрес таблицы.
-// Здесь явно указываем вкладку Активности.
+// Та же схема, что работает в Shop, но явно берём вкладку Активности.
 const SHEET_URL =
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=Активности`;
 
@@ -81,7 +80,7 @@ function getCellValue(cells, index, fallback = '') {
 function getActivityImageUrl(value) {
   const image = String(value || '').trim();
   if (!image) return '';
-  if (/^(https?:)?\\/\\//i.test(image) || image.startsWith('data:')) return image;
+  if (/^(https?:)?\/\//i.test(image) || image.startsWith('data:')) return image;
   return image;
 }
 

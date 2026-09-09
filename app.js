@@ -104,7 +104,7 @@ async function loadActivities() {
       throw new Error('В ответе Google Таблицы отсутствуют строки с активностями.');
     }
 
-    activities = json.table.rows.map((row, index) => {
+    activities = json.table.rows.slice(1).map((row, index) => {
       const cells = row.c || [];
       return {
         key: String(getCellValue(cells, 0, `activity-${index}`)).trim().toLowerCase(),

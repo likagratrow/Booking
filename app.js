@@ -161,6 +161,14 @@ async function loadEvents() {
   }
 }
 
+function normalizeActivityKey(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'диоген') return 'diogen';
+  if (normalized === 'мастер-класс' || normalized === 'мастер класс') return 'masterclass';
+  if (normalized === 'обсудить заказ' || normalized === 'заказ') return 'order';
+  return normalized;
+}
+
 function renderActivities() {
   activitiesContainer.innerHTML = activities.map(activity => `
     <button class="choice" type="button" data-action="${escapeHtml(activity.key)}">
@@ -224,7 +232,8 @@ function openEventChooser(key) {
   const activity = activities.find(item => item.key === key);
   if (!activity) return;
 
-  const matchingEvents = events.filter(event => event.activity === key);
+  const normalizedKey = normalizeActivityKey(key);
+  const matchingEvents = events.filter(event => normalizeActivityKey(event.activity) === normalizedKey);
   eventsTitle.textContent = activity.title;
 
   if (!matchingEvents.length) {
@@ -239,7 +248,7 @@ function openEventChooser(key) {
           <h3>${escapeHtml(event.name)}</h3>
           <p class="event-description">${escapeHtml(event.description)}</p>
           <div class="event-meta">
-            <div class="event-meta-row"><span>Цена</span><strong>${escapeHtml(event.price || '—')}</strong></div>
+            <div class="event-meta-row"><strong style="font-size: 1.25em;">${escapeHtml(event.price || '—')}</strong></div>
             <div class="event-meta-row"><span>Длительность</span><strong>${escapeHtml(event.duration || '—')}</strong></div>
             <div class="event-meta-row"><span>Возраст</span><strong>${escapeHtml(event.age || '—')}</strong></div>
           </div>

@@ -10,7 +10,6 @@ if (tg) {
   tg.ready();
   tg.expand();
   tg.setBackgroundColor?.('bg_color');
-  tg.setHeaderColor?.('header_bg_color');
 }
 
 const user = tg?.initDataUnsafe?.user;

@@ -136,14 +136,14 @@ h2 {
 .dot.mk { background: var(--mk); }
 .dot.closed { background: var(--closed); }
 
-.calendar { display: grid; gap: 8px; }
-.day { padding: 11px; background: var(--tg-secondary-bg); border: 1px solid var(--tg-separator); border-radius: 10px; }
-.day-title { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: 700; }
+.calendar { display: grid; gap: 10px; }
+.day { padding: 13px; background: var(--tg-secondary-bg); border: 1px solid var(--tg-separator); border-radius: 14px; }
+.day-title { display: flex; justify-content: space-between; margin-bottom: 9px; font-weight: 700; }
 .day-title span { color: var(--tg-hint); font-weight: 500; }
-.slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.slot { min-height: 43px; padding: 7px; color: var(--tg-text); text-align: left; background: var(--tg-bg); border: 1px solid var(--tg-separator); border-radius: 8px; }
-.slot strong { display: block; font-size: 12px; }
-.slot small { color: var(--tg-hint); font-size: 10px; }
+.slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.slot { min-height: 45px; padding: 8px; color: var(--tg-text); text-align: left; background: var(--tg-bg); border: 1px solid var(--tg-separator); border-radius: 10px; }
+.slot strong { display: block; font-size: 13px; }
+.slot small { color: var(--tg-hint); font-size: 11px; }
 .slot.free { border-color: color-mix(in srgb, var(--free) 55%, var(--tg-separator)); }
 .slot.dio { border-color: color-mix(in srgb, var(--dio) 55%, var(--tg-separator)); }
 .slot.mk { border-color: color-mix(in srgb, var(--mk) 55%, var(--tg-separator)); }

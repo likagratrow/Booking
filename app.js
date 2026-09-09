@@ -14,6 +14,26 @@ if (user) {
 
 const calendar = document.getElementById('calendar');
 const message = document.getElementById('message');
+const activityModal = document.getElementById('activity-modal');
+const activityTitle = document.getElementById('activity-title');
+const activityDescription = document.getElementById('activity-description');
+const modalClose = document.getElementById('modal-close');
+const modalOk = document.getElementById('modal-ok');
+
+const activities = {
+  diogen: {
+    title: 'Диоген',
+    description: 'Можно прийти в мастерскую и провести время в своём ритме: поработать над чем-то своим, потискать кожу, попить чаю, посидеть в тишине или вообще ничего не делать.'
+  },
+  masterclass: {
+    title: 'Мастер-класс',
+    description: 'Вы выбираете изделие и приходите делать его вместе с мастером. Мастер-класс проходит в заданное время и длится столько, сколько указано в его описании.'
+  },
+  order: {
+    title: 'Обсудить заказ',
+    description: 'Если вы хотите сделать изделие на заказ, можно прийти в мастерскую лично: обсудить задумку, материалы, размеры, детали и все нюансы будущей вещи.'
+  }
+};
 
 function localDate(offset) {
   const d = new Date();
@@ -61,9 +81,23 @@ renderCalendar();
 
 document.querySelectorAll('.choice').forEach(button => {
   button.addEventListener('click', () => {
-    const type = button.dataset.action === 'diogen' ? 'Диоген' : 'Мастер-класс';
-    showMessage(`Вы выбрали «${type}». Следующим шагом здесь появятся доступные варианты записи.`);
+    const activity = activities[button.dataset.action];
+    if (!activity) return;
+
+    activityTitle.textContent = activity.title;
+    activityDescription.textContent = activity.description;
+    activityModal.classList.remove('hidden');
   });
+});
+
+function closeActivityModal() {
+  activityModal.classList.add('hidden');
+}
+
+modalClose.addEventListener('click', closeActivityModal);
+modalOk.addEventListener('click', closeActivityModal);
+activityModal.addEventListener('click', event => {
+  if (event.target === activityModal) closeActivityModal();
 });
 
 document.querySelectorAll('.slot').forEach(button => {

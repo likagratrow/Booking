@@ -1,8 +1,15 @@
+const SHEET_ID = '1FcetqNVvXNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
+const ACTIVITIES_SHEET_NAME = 'Активности';
+const ACTIVITIES_SHEET_URL =
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(ACTIVITIES_SHEET_NAME)}`;
+
 const tg = window.Telegram?.WebApp;
 
 if (tg) {
   tg.ready();
   tg.expand();
+  tg.setBackgroundColor?.('bg_color');
+  tg.setHeaderColor?.('header_bg_color');
 }
 
 const user = tg?.initDataUnsafe?.user;
@@ -12,28 +19,135 @@ if (user) {
   hello.textContent = `Здравствуйте, ${user.first_name || 'гость'}!`;
 }
 
+const activitiesContainer = document.getElementById('activities');
 const calendar = document.getElementById('calendar');
 const message = document.getElementById('message');
 const activityModal = document.getElementById('activity-modal');
 const activityTitle = document.getElementById('activity-title');
 const activityDescription = document.getElementById('activity-description');
+const activityImageWrap = document.getElementById('activity-image-wrap');
+const activityImage = document.getElementById('activity-image');
 const modalClose = document.getElementById('modal-close');
 const modalOk = document.getElementById('modal-ok');
 
-const activities = {
-  diogen: {
+const fallbackActivities = [
+  {
+    key: 'diogen',
     title: 'Диоген',
-    description: 'Можно прийти в мастерскую и провести время в своём ритме: поработать над чем-то своим, потискать кожу, попить чаю, посидеть в тишине или вообще ничего не делать.'
+    description: 'Можно прийти в мастерскую и провести время в своём ритме: поработать над чем-то своим, потискать кожу, попить чаю, посидеть в тишине или вообще ничего не делать.',
+    image: ''
   },
-  masterclass: {
+  {
+    key: 'masterclass',
     title: 'Мастер-класс',
-    description: 'Вы выбираете изделие и приходите делать его вместе с мастером. Мастер-класс проходит в заданное время и длится столько, сколько указано в его описании.'
+    description: 'Вы выбираете изделие и приходите делать его вместе с мастером. Мастер-класс проходит в заданное время и длится столько, сколько указано в его описании.',
+    image: ''
   },
-  order: {
+  {
+    key: 'order',
     title: 'Обсудить заказ',
-    description: 'Если вы хотите сделать изделие на заказ, можно прийти в мастерскую лично: обсудить задумку, материалы, размеры, детали и все нюансы будущей вещи.'
+    description: 'Если вы хотите сделать изделие на заказ, можно прийти в мастерскую лично: обсудить задумку, материалы, размеры, детали и все нюансы будущей вещи.',
+    image: ''
   }
-};
+];
+
+let activities = fallbackActivities;
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function parseGvizResponse(text) {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error('Google Таблица не вернула данные.');
+  }
+  return JSON.parse(text.slice(start, end + 1));
+}
+
+function getCellValue(cells, index, fallback = '') {
+  const cell = cells[index];
+  return cell && cell.v !== null && cell.v !== undefined ? cell.v : fallback;
+}
+
+function getActivityImageUrl(value) {
+  const image = String(value || '').trim();
+  if (!image) return '';
+  if (/^(https?:)?\/\//i.test(image) || image.startsWith('data:')) return image;
+  return image;
+}
+
+async function loadActivities() {
+  try {
+    const response = await fetch(ACTIVITIES_SHEET_URL, { method: 'GET', cache: 'no-store' });
+    if (!response.ok) throw new Error(`Google Sheets вернул HTTP ${response.status}`);
+
+    const text = await response.text();
+    const json = parseGvizResponse(text);
+    const rows = json?.table?.rows || [];
+
+    const loaded = rows.map((row, index) => {
+      const cells = row.c || [];
+      return {
+        key: String(getCellValue(cells, 0, `activity-${index}`)).trim().toLowerCase(),
+        title: String(getCellValue(cells, 1, '')).trim(),
+        description: String(getCellValue(cells, 2, '')).trim(),
+        image: getActivityImageUrl(getCellValue(cells, 3, ''))
+      };
+    }).filter(activity => activity.key && activity.title);
+
+    if (loaded.length) activities = loaded;
+  } catch (error) {
+    console.warn('Не удалось загрузить активности из Google Sheets, используются резервные данные:', error);
+  }
+
+  renderActivities();
+}
+
+function renderActivities() {
+  activitiesContainer.innerHTML = activities.map(activity => `
+    <button class="choice" type="button" data-action="${escapeHtml(activity.key)}">
+      <span class="choice-icon">${activity.key === 'diogen' ? '◌' : activity.key === 'masterclass' ? '✦' : '✎'}</span>
+      <span>
+        <strong>${escapeHtml(activity.title)}</strong>
+        <small>${escapeHtml(activity.description)}</small>
+      </span>
+    </button>
+  `).join('');
+
+  activitiesContainer.querySelectorAll('.choice').forEach(button => {
+    button.addEventListener('click', () => openActivity(button.dataset.action));
+  });
+}
+
+function openActivity(key) {
+  const activity = activities.find(item => item.key === key);
+  if (!activity) return;
+
+  activityTitle.textContent = activity.title;
+  activityDescription.textContent = activity.description;
+
+  if (activity.image) {
+    activityImage.src = activity.image;
+    activityImage.alt = activity.title;
+    activityImageWrap.classList.remove('hidden');
+    activityImage.onerror = () => {
+      activityImage.removeAttribute('src');
+      activityImageWrap.classList.add('hidden');
+    };
+  } else {
+    activityImage.removeAttribute('src');
+    activityImageWrap.classList.add('hidden');
+  }
+
+  activityModal.classList.remove('hidden');
+}
 
 function localDate(offset) {
   const d = new Date();
@@ -68,27 +182,22 @@ function renderCalendar() {
 
     return `
       <article class="day">
-        <div class="day-title">
-          <span>${dateLabel(date)}</span>
-        </div>
+        <div class="day-title"><span>${dateLabel(date)}</span></div>
         <div class="slots">${slots}</div>
       </article>
     `;
   }).join('');
-}
 
-renderCalendar();
-
-document.querySelectorAll('.choice').forEach(button => {
-  button.addEventListener('click', () => {
-    const activity = activities[button.dataset.action];
-    if (!activity) return;
-
-    activityTitle.textContent = activity.title;
-    activityDescription.textContent = activity.description;
-    activityModal.classList.remove('hidden');
+  document.querySelectorAll('.slot').forEach(button => {
+    button.addEventListener('click', () => {
+      if (button.dataset.state === 'closed') {
+        showMessage('Это время закрыто. Выберите другой час.');
+        return;
+      }
+      showMessage(`Вы выбрали ${button.dataset.time}. Пока это демонстрационный календарь — запись ещё не отправляется.`);
+    });
   });
-});
+}
 
 function closeActivityModal() {
   activityModal.classList.add('hidden');
@@ -100,18 +209,11 @@ activityModal.addEventListener('click', event => {
   if (event.target === activityModal) closeActivityModal();
 });
 
-document.querySelectorAll('.slot').forEach(button => {
-  button.addEventListener('click', () => {
-    if (button.dataset.state === 'closed') {
-      showMessage('Это время закрыто. Выберите другой час.');
-      return;
-    }
-    showMessage(`Вы выбрали ${button.dataset.time}. Пока это демонстрационный календарь — запись ещё не отправляется.`);
-  });
-});
-
 function showMessage(text) {
   message.textContent = text;
   message.classList.remove('hidden');
   message.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
+
+renderCalendar();
+loadActivities();

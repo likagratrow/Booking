@@ -1,7 +1,9 @@
-const SHEET_ID = '1FcetqNVvXNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
-const ACTIVITIES_SHEET_NAME = 'Активности';
-const ACTIVITIES_SHEET_URL =
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(ACTIVITIES_SHEET_NAME)}`;
+const SHEET_ID = '1FcetqNVvNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
+
+// Та же схема, что работает в Shop: один стабильный GViz-адрес таблицы.
+// Здесь явно указываем вкладку Активности.
+const SHEET_URL =
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=Активности`;
 
 const tg = window.Telegram?.WebApp;
 
@@ -58,7 +60,7 @@ function escapeHtml(value) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+    .replace(/\"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
 
@@ -79,13 +81,13 @@ function getCellValue(cells, index, fallback = '') {
 function getActivityImageUrl(value) {
   const image = String(value || '').trim();
   if (!image) return '';
-  if (/^(https?:)?\/\//i.test(image) || image.startsWith('data:')) return image;
+  if (/^(https?:)?\\/\\//i.test(image) || image.startsWith('data:')) return image;
   return image;
 }
 
 async function loadActivities() {
   try {
-    const response = await fetch(ACTIVITIES_SHEET_URL, { method: 'GET', cache: 'no-store' });
+    const response = await fetch(SHEET_URL, { method: 'GET', cache: 'no-store' });
     if (!response.ok) throw new Error(`Google Sheets вернул HTTP ${response.status}`);
 
     const text = await response.text();

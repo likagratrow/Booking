@@ -1,8 +1,9 @@
 const SHEET_ID = '1FcetqNVvXNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
 
-// Та же схема, что работает в Shop, но берём вкладку Активности.
 const SHEET_URL =
   `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Активности')}`;
+const EVENTS_SHEET_URL =
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Ивенты')}`;
 
 const tg = window.Telegram?.WebApp;
 
@@ -29,6 +30,10 @@ const activityImageWrap = document.getElementById('activity-image-wrap');
 const activityImage = document.getElementById('activity-image');
 const modalClose = document.getElementById('modal-close');
 const modalOk = document.getElementById('modal-ok');
+const eventsModal = document.getElementById('events-modal');
+const eventsTitle = document.getElementById('events-title');
+const eventsList = document.getElementById('events-list');
+const eventsClose = document.getElementById('events-close');
 
 const fallbackActivities = [
   {
@@ -52,6 +57,9 @@ const fallbackActivities = [
 ];
 
 let activities = fallbackActivities;
+let events = [];
+let selectedEvent = null;
+let selectedBookingType = null;
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -83,7 +91,6 @@ function getCellValue(cells, index, fallback = '') {
 function getActivityImageUrl(value) {
   const image = String(value || '').trim();
   if (!image) return '';
-  if (/^(https?:)?\/\//i.test(image) || image.startsWith('data:')) return image;
   return image;
 }
 
@@ -123,6 +130,37 @@ async function loadActivities() {
   }
 }
 
+async function loadEvents() {
+  try {
+    const response = await fetch(EVENTS_SHEET_URL, { method: 'GET', cache: 'no-store' });
+    if (!response.ok) throw new Error(`Google Sheets вернул HTTP ${response.status}`);
+    const text = await response.text();
+    const json = parseGvizResponse(text);
+    if (!json.table || !Array.isArray(json.table.rows)) {
+      throw new Error('В листе «Ивенты» отсутствуют строки.');
+    }
+
+    events = json.table.rows.slice(1).map((row, index) => {
+      const cells = row.c || [];
+      return {
+        activity: String(getCellValue(cells, 0, '')).trim().toLowerCase(),
+        name: String(getCellValue(cells, 1, 'Без названия')).trim(),
+        description: String(getCellValue(cells, 2, '')).trim(),
+        price: String(getCellValue(cells, 3, '')).trim(),
+        duration: String(getCellValue(cells, 4, '')).trim(),
+        age: String(getCellValue(cells, 5, '')).trim(),
+        image: getActivityImageUrl(getCellValue(cells, 6, '')),
+        index
+      };
+    }).filter(event => event.activity && event.name);
+
+    console.log('Ивенты загружены:', events);
+  } catch (error) {
+    console.error('Ошибка загрузки ивентов:', error);
+    events = [];
+  }
+}
+
 function renderActivities() {
   activitiesContainer.innerHTML = activities.map(activity => `
     <button class="choice" type="button" data-action="${escapeHtml(activity.key)}">
@@ -131,11 +169,23 @@ function renderActivities() {
         <strong>${escapeHtml(activity.title)}</strong>
         <small>${escapeHtml(activity.description)}</small>
       </span>
+      <span class="choice-calendar" role="button" aria-label="Выбрать время" title="Выбрать время">
+        <span class="choice-calendar-icon">▣</span>
+        <span class="choice-calendar-arrow">↓</span>
+      </span>
     </button>
   `).join('');
 
   activitiesContainer.querySelectorAll('.choice').forEach(button => {
-    button.addEventListener('click', () => openActivity(button.dataset.action));
+    button.addEventListener('click', event => {
+      if (event.target.closest('.choice-calendar')) {
+        event.preventDefault();
+        event.stopPropagation();
+        openEventChooser(button.dataset.action);
+        return;
+      }
+      openActivity(button.dataset.action);
+    });
   });
 }
 
@@ -160,6 +210,64 @@ function openActivity(key) {
   }
 
   activityModal.classList.remove('hidden');
+}
+
+function openEventChooser(key) {
+  if (key === 'order') {
+    selectedEvent = null;
+    selectedBookingType = 'order';
+    closeEventsModal();
+    goToCalendar('order');
+    return;
+  }
+
+  const activity = activities.find(item => item.key === key);
+  if (!activity) return;
+
+  const matchingEvents = events.filter(event => event.activity === key);
+  eventsTitle.textContent = activity.title;
+
+  if (!matchingEvents.length) {
+    eventsList.innerHTML = '<div class="events-empty">Пока нет доступных вариантов.</div>';
+  } else {
+    eventsList.innerHTML = matchingEvents.map((event, index) => `
+      <article class="event-card">
+        <div class="event-image-wrap ${event.image ? '' : 'empty'}">
+          ${event.image ? `<img class="event-image" src="${escapeHtml(event.image)}" alt="${escapeHtml(event.name)}">` : 'Фото пока нет'}
+        </div>
+        <div class="event-body">
+          <h3>${escapeHtml(event.name)}</h3>
+          <p class="event-description">${escapeHtml(event.description)}</p>
+          <div class="event-meta">
+            <div class="event-meta-row"><span>Цена</span><strong>${escapeHtml(event.price || '—')}</strong></div>
+            <div class="event-meta-row"><span>Длительность</span><strong>${escapeHtml(event.duration || '—')}</strong></div>
+            <div class="event-meta-row"><span>Возраст</span><strong>${escapeHtml(event.age || '—')}</strong></div>
+          </div>
+          <button class="event-book" type="button" data-event-index="${index}">Записаться</button>
+        </div>
+      </article>
+    `).join('');
+
+    eventsList.querySelectorAll('.event-book').forEach(button => {
+      button.addEventListener('click', () => {
+        const eventIndex = Number(button.dataset.eventIndex);
+        chooseEvent(matchingEvents[eventIndex]);
+      });
+    });
+  }
+
+  eventsModal.classList.remove('hidden');
+}
+
+function chooseEvent(event) {
+  selectedEvent = event;
+  selectedBookingType = event.activity;
+  closeEventsModal();
+  goToCalendar(event.activity, event.name);
+}
+
+function closeEventsModal() {
+  eventsModal.classList.add('hidden');
 }
 
 function localDate(offset) {
@@ -191,6 +299,10 @@ function renderCalendar() {
     return `<article class="day"><div class="day-title"><span>${dateLabel(date)}</span></div><div class="slots">${slots}</div></article>`;
   }).join('');
 
+  bindCalendarSlots();
+}
+
+function bindCalendarSlots() {
   document.querySelectorAll('.slot').forEach(button => {
     button.addEventListener('click', () => {
       if (button.dataset.state === 'closed') {
@@ -202,11 +314,37 @@ function renderCalendar() {
   });
 }
 
+function clearCalendarHighlight() {
+  document.querySelectorAll('.slot.highlighted').forEach(slot => slot.classList.remove('highlighted'));
+}
+
+function highlightCalendarSlots(type, eventName = '') {
+  clearCalendarHighlight();
+
+  const selector = type === 'masterclass' ? '.slot.mk' : '.slot.free';
+  document.querySelectorAll(selector).forEach(slot => slot.classList.add('highlighted'));
+
+  if (type === 'masterclass') {
+    showMessage(eventName ? `Подсвечены места для «${eventName}» и существующие МК.` : 'Подсвечены доступные места для мастер-классов.');
+  } else {
+    showMessage(type === 'order' ? 'Подсвечены свободные часы для обсуждения заказа.' : 'Подсвечены все свободные часы.');
+  }
+}
+
+function goToCalendar(type, eventName = '') {
+  highlightCalendarSlots(type, eventName);
+  setTimeout(() => {
+    document.querySelector('.calendar-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 40);
+}
+
 function closeActivityModal() { activityModal.classList.add('hidden'); }
 
 modalClose.addEventListener('click', closeActivityModal);
 modalOk.addEventListener('click', closeActivityModal);
 activityModal.addEventListener('click', event => { if (event.target === activityModal) closeActivityModal(); });
+eventsClose.addEventListener('click', closeEventsModal);
+eventsModal.addEventListener('click', event => { if (event.target === eventsModal) closeEventsModal(); });
 
 function showMessage(text) {
   message.textContent = text;
@@ -215,4 +353,4 @@ function showMessage(text) {
 }
 
 renderCalendar();
-loadActivities();
+Promise.all([loadActivities(), loadEvents()]);

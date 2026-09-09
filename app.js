@@ -1,8 +1,8 @@
 const SHEET_ID = '1FcetqNVvXNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
 
-// Та же схема, что работает в Shop, но явно берём вкладку Активности.
+// Та же схема, что работает в Shop, но берём вкладку Активности.
 const SHEET_URL =
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=Активности`;
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Активности')}`;
 
 const tg = window.Telegram?.WebApp;
 
@@ -67,9 +67,13 @@ function parseGvizResponse(text) {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start === -1 || end === -1 || end <= start) {
-    throw new Error('Google Таблица не вернула данные.');
+    throw new Error('Google Таблица не вернула данные. Проверьте публикацию таблицы в интернете.');
   }
-  return JSON.parse(text.slice(start, end + 1));
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    throw new Error('Не удалось разобрать ответ Google Таблицы.');
+  }
 }
 
 function getCellValue(cells, index, fallback = '') {
@@ -84,31 +88,40 @@ function getActivityImageUrl(value) {
   return image;
 }
 
+function showLoadError(error) {
+  if (!activitiesContainer) return;
+  const messageText = error?.message || String(error) || 'Неизвестная ошибка';
+  activitiesContainer.innerHTML = `<div class="load-error"><h3>Не удалось загрузить активности</h3><p>${escapeHtml(messageText)}</p><button type="button" onclick="loadActivities()">Повторить</button></div>`;
+}
+
 async function loadActivities() {
+  if (activitiesContainer) activitiesContainer.innerHTML = '<div class="loading">Загрузка активностей...</div>';
   try {
     const response = await fetch(SHEET_URL, { method: 'GET', cache: 'no-store' });
     if (!response.ok) throw new Error(`Google Sheets вернул HTTP ${response.status}`);
-
     const text = await response.text();
     const json = parseGvizResponse(text);
-    const rows = json?.table?.rows || [];
+    if (!json.table || !Array.isArray(json.table.rows)) {
+      throw new Error('В ответе Google Таблицы отсутствуют строки с активностями.');
+    }
 
-    const loaded = rows.map((row, index) => {
+    activities = json.table.rows.map((row, index) => {
       const cells = row.c || [];
       return {
         key: String(getCellValue(cells, 0, `activity-${index}`)).trim().toLowerCase(),
-        title: String(getCellValue(cells, 1, '')).trim(),
+        title: String(getCellValue(cells, 1, 'Без названия')).trim(),
         description: String(getCellValue(cells, 2, '')).trim(),
         image: getActivityImageUrl(getCellValue(cells, 3, ''))
       };
     }).filter(activity => activity.key && activity.title);
 
-    if (loaded.length) activities = loaded;
+    if (!activities.length) throw new Error('Во вкладке «Активности» нет заполненных активностей.');
+    console.log('Активности загружены:', activities);
+    renderActivities();
   } catch (error) {
-    console.warn('Не удалось загрузить активности из Google Sheets, используются резервные данные:', error);
+    console.error('Ошибка загрузки активностей:', error);
+    showLoadError(error);
   }
-
-  renderActivities();
 }
 
 function renderActivities() {
@@ -158,11 +171,7 @@ function localDate(offset) {
 }
 
 function dateLabel(date) {
-  return date.toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    weekday: 'long'
-  });
+  return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'long' });
 }
 
 const demoDays = [
@@ -180,13 +189,7 @@ function renderCalendar() {
         <small>${label}</small>
       </button>
     `).join('');
-
-    return `
-      <article class="day">
-        <div class="day-title"><span>${dateLabel(date)}</span></div>
-        <div class="slots">${slots}</div>
-      </article>
-    `;
+    return `<article class="day"><div class="day-title"><span>${dateLabel(date)}</span></div><div class="slots">${slots}</div></article>`;
   }).join('');
 
   document.querySelectorAll('.slot').forEach(button => {
@@ -200,15 +203,11 @@ function renderCalendar() {
   });
 }
 
-function closeActivityModal() {
-  activityModal.classList.add('hidden');
-}
+function closeActivityModal() { activityModal.classList.add('hidden'); }
 
 modalClose.addEventListener('click', closeActivityModal);
 modalOk.addEventListener('click', closeActivityModal);
-activityModal.addEventListener('click', event => {
-  if (event.target === activityModal) closeActivityModal();
-});
+activityModal.addEventListener('click', event => { if (event.target === activityModal) closeActivityModal(); });
 
 function showMessage(text) {
   message.textContent = text;

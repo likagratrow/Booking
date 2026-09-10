@@ -1,6 +1,6 @@
 const SHEET_ID='1FcetqNVvXNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
 const SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Активности')}`;
-const EVENTS_SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tqx?out:json&sheet=${encodeURIComponent('Ивенты')}`;
+const EVENTS_SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Ивенты')}`;
 const tg=window.Telegram?.WebApp;if(tg){tg.ready();tg.expand();tg.setBackgroundColor?.('bg_color');}
 const user=tg?.initDataUnsafe?.user,hello=document.getElementById('hello');if(user)hello.textContent=`Здравствуйте, ${user.first_name||'гость'}!`;
 const activitiesContainer=document.getElementById('activities'),calendar=document.getElementById('calendar'),message=document.getElementById('message'),activityModal=document.getElementById('activity-modal'),activityTitle=document.getElementById('activity-title'),activityDescription=document.getElementById('activity-description'),activityImageWrap=document.getElementById('activity-image-wrap'),activityImage=document.getElementById('activity-image'),modalClose=document.getElementById('modal-close'),modalOk=document.getElementById('modal-ok'),eventsModal=document.getElementById('events-modal'),eventsTitle=document.getElementById('events-title'),eventsList=document.getElementById('events-list'),eventsClose=document.getElementById('events-close');

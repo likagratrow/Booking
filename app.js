@@ -249,7 +249,7 @@ function openEventChooser(key) {
           <p class="event-description">${escapeHtml(event.description)}</p>
           <div class="event-meta">
             <div class="event-meta-row"><strong style="font-size: 1.25em;">${escapeHtml(event.price || '—')}</strong></div>
-            <div class="event-meta-row"><span>Длительность</span><strong>${escapeHtml(event.duration || '—')}</strong></div>
+            <div class="event-meta-row"><span>Длительность</span><strong>${escapeHtml(event.duration || '—')} час</strong></div>
             <div class="event-meta-row"><span>Возраст</span><strong>${escapeHtml(event.age || '—')}</strong></div>
           </div>
           <button class="event-book" type="button" data-event-index="${index}">Записаться</button>

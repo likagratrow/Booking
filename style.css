@@ -67,7 +67,7 @@ h2 { margin-bottom: 12px; font-size: 18px; font-weight: 700; }
 .modal-ok { width: 100%; padding: 10px 12px; color: var(--tg-button-text); background: var(--tg-accent); border: none; border-radius: 8px; font-weight: 600; }
 .events-modal-content { width: min(720px, 100%); max-height: min(86vh, 720px); padding: 18px 12px 14px; overflow-y: auto; }
 .events-list { display: grid; grid-template-columns: 1fr; gap: 12px; overflow: visible; padding: 4px 4px 10px; }
-.event-card { width: 100%; overflow: hidden; background: transparent; border: 0; border-radius: 13px; }
+.event-card { position: relative; width: 100%; overflow: hidden; background: transparent; border: 0; border-radius: 13px; }
 .event-image-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: var(--tg-section-bg); border-radius: 13px; }
 .event-image { display: block; width: 100%; height: 100%; object-fit: cover; }
 .event-image-wrap.empty { display: grid; place-items: center; color: var(--tg-text); font-size: 12px; }
@@ -83,7 +83,7 @@ h2 { margin-bottom: 12px; font-size: 18px; font-weight: 700; }
 .complexity-stars { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; width: 28px; height: 122px; padding: 3px 2px; color: var(--tg-text); border: 1px solid var(--tg-separator); border-radius: 7px; font-size: 15px; line-height: 1; letter-spacing: 0; background: color-mix(in srgb, var(--tg-bg) 72%, transparent); backdrop-filter: blur(2px); }
 .complexity-star { color: var(--tg-hint); opacity: .75; }
 .complexity-star.filled { color: var(--tg-accent); opacity: 1; }
-.event-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
+.event-actions { position: absolute; left: 12px; right: 12px; bottom: 10px; z-index: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 0; }
 .event-details, .event-book { width: 100%; padding: 7px 10px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .event-details { color: var(--tg-accent); background: transparent; border: 1px solid var(--tg-accent); }
 .event-book { color: var(--tg-button-text); background: color-mix(in srgb, var(--tg-accent) 55%, transparent); border: 1px solid color-mix(in srgb, var(--tg-button-text) 35%, transparent); }

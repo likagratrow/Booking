@@ -85,7 +85,7 @@ h2 { margin-bottom: 12px; font-size: 18px; font-weight: 700; }
 .complexity-star.filled { color: var(--tg-accent); opacity: 1; }
 .event-actions { position: absolute; left: 12px; right: 12px; bottom: 10px; z-index: 2; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 0; }
 .event-details, .event-book { width: 100%; padding: 7px 10px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; }
-.event-details { color: var(--tg-accent); background: transparent; border: 1px solid var(--tg-accent); }
+.event-details { color: var(--tg-accent); background: color-mix(in srgb, var(--tg-bg) 72%, transparent); border: 1px solid var(--tg-accent); }
 .event-book { color: var(--tg-button-text); background: color-mix(in srgb, var(--tg-accent) 55%, transparent); border: 1px solid color-mix(in srgb, var(--tg-button-text) 35%, transparent); }
 .event-description { margin: 8px 2px 2px; padding: 10px 12px; color: var(--tg-text); background: var(--tg-section-bg); border: 1px solid var(--tg-separator); border-radius: 8px; font-size: 13px; line-height: 1.45; white-space: pre-line; }
 .event-description.hidden { display: none; }

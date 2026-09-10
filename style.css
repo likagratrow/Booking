@@ -74,20 +74,16 @@ h2 { margin-bottom: 12px; font-size: 18px; font-weight: 700; }
 .event-overlay { position: absolute; inset: 0; padding: 12px; pointer-events: none; }
 .event-overlay h3 { position: absolute; top: 12px; left: 12px; right: 95px; margin: 0; font-size: 17px; line-height: 1.15; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
 .event-price { position: absolute; top: 34px; left: 12px; display: block; font-size: 1.5em; line-height: 1; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
-.event-age { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 58px; height: 58px; padding: 5px; border: 1px solid var(--tg-separator); border-radius: 50%; background: color-mix(in srgb, var(--tg-bg) 72%, transparent); backdrop-filter: blur(2px); }
-.event-age span { color: var(--tg-hint); font-size: 9px; line-height: 1; }
-.event-age strong { font-size: 1.5em; line-height: 1.05; }
-.event-complexity { position: absolute; top: 74px; right: 10px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.event-complexity > span { color: var(--tg-hint); font-size: 9px; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
-.complexity-stars { display: inline-flex; gap: 1px; padding: 3px 5px; border: 1px solid var(--tg-separator); border-radius: 7px; font-size: 15px; line-height: 1; letter-spacing: 1px; background: color-mix(in srgb, var(--tg-bg) 72%, transparent); backdrop-filter: blur(2px); }
+.event-age, .event-duration { position: absolute; right: 10px; display: flex; align-items: center; justify-content: center; width: 58px; height: 58px; padding: 5px; border: 1px solid var(--tg-separator); border-radius: 50%; background: color-mix(in srgb, var(--tg-bg) 72%, transparent); backdrop-filter: blur(2px); }
+.event-age { top: 10px; }
+.event-duration { top: 74px; }
+.event-age strong, .event-duration strong { font-size: 1em; line-height: 1.05; text-align: center; }
+.event-complexity { position: absolute; top: 74px; right: 78px; bottom: 74px; display: flex; align-items: center; justify-content: flex-end; }
+.complexity-stars { display: inline-flex; flex-direction: column; gap: 1px; padding: 3px 5px; border: 1px solid var(--tg-separator); border-radius: 7px; font-size: 15px; line-height: 1; letter-spacing: 1px; background: color-mix(in srgb, var(--tg-bg) 72%, transparent); backdrop-filter: blur(2px); }
 .complexity-star { color: var(--tg-hint); opacity: .45; }
 .complexity-star.filled { color: var(--tg-accent); opacity: 1; }
 .event-book { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); width: 50%; padding: 6px 10px; color: var(--tg-button-text); background: color-mix(in srgb, var(--tg-accent) 72%, transparent); border: 1px solid color-mix(in srgb, var(--tg-button-text) 35%, transparent); border-radius: 7px; font-size: 12px; font-weight: 600; pointer-events: auto; opacity: .9; }
 .event-body { padding: 11px 13px 13px; }
 .event-description { margin: 0; color: var(--tg-hint); font-size: 12px; line-height: 1.4; }
-.event-meta { display: grid; gap: 7px; margin-bottom: 10px; }
-.event-meta-row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
-.event-meta-row span:first-child { color: var(--tg-hint); }
-.event-meta-row strong { text-align: right; }
 .events-empty { padding: 20px 8px; color: var(--tg-hint); text-align: center; font-size: 13px; }
 @media (max-width: 430px) { .app { padding: 10px 8px 28px; } .card { padding: 12px; } .slots { grid-template-columns: 1fr; } .events-modal-content { padding-left: 8px; padding-right: 8px; } }

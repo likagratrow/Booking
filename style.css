@@ -119,3 +119,24 @@ h2 { margin-bottom: 12px; font-size: 18px; font-weight: 700; }
 .booking-modal-content .modal-ok { min-height: 44px; }
 .calendar-slot.candidate { box-shadow: inset 0 0 0 2px var(--tg-accent); }
 @media (max-width: 430px) { .booking-date-row { gap: 8px; } .booking-time { width: 68px; } .booking-date { min-width: 82px; } }
+
+/* Calendar grid cell layout */
+.calendar-hour-lines > div {
+  min-height: 0;
+  padding: 3px;
+  border-bottom: 1px solid var(--tg-separator);
+}
+.calendar-cell {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.calendar-cell .calendar-slot {
+  position: static;
+  left: auto;
+  right: auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}

@@ -102,3 +102,20 @@ h2 { margin-bottom: 12px; font-size: 18px; font-weight: 700; }
 .event-description.hidden { display: none; }
 .events-empty { padding: 20px 8px; color: var(--tg-hint); text-align: center; font-size: 13px; }
 @media (max-width: 430px) { .app { padding: 8px 8px 10px; } .card { padding: 12px; } .calendar-grid { min-width: 3162px; } .calendar-days, .calendar-columns { grid-template-columns: repeat(30, 104px); } .events-modal-content { padding-left: 8px; padding-right: 8px; } .event-text-block { max-width: calc(100% - 130px); } .event-age, .event-duration { right: 42px; } .event-complexity { right: 8px; } }
+
+.booking-modal-content { width: min(430px, 100%); }
+.booking-activity { margin: -2px 0 16px; font-size: 16px; font-weight: 600; }
+.booking-date-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 14px; margin: 6px 0 18px; padding: 12px 0; border-top: 1px solid var(--tg-separator); border-bottom: 1px solid var(--tg-separator); }
+.booking-time-wrap { display: flex; align-items: center; min-width: 0; gap: 4px; }
+.booking-time { width: 76px; min-width: 44px; min-height: 44px; padding: 5px 4px; color: var(--tg-text); background: var(--tg-secondary-bg); border: 1px solid var(--tg-separator); border-radius: 8px; font-size: 18px; font-weight: 700; text-align: center; }
+.booking-dash { flex: 0 0 auto; color: var(--tg-hint); font-size: 18px; }
+.booking-date { min-width: 92px; color: var(--tg-text); font-size: 14px; font-weight: 600; line-height: 1.2; text-align: right; }
+.booking-duration-controls { display: flex; justify-content: flex-end; gap: 4px; margin: -12px 0 12px; }
+.booking-duration-controls.hidden { display: none; }
+.booking-arrow { display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; color: var(--tg-text); background: var(--tg-secondary-bg); border: 1px solid var(--tg-separator); border-radius: 8px; font-size: 18px; line-height: 1; cursor: pointer; }
+.booking-arrow:disabled { opacity: .35; cursor: default; }
+.booking-tickets { display: grid; grid-template-columns: minmax(0, 1fr) 84px; align-items: center; gap: 12px; margin: 12px 0; color: var(--tg-hint); font-size: 13px; }
+.booking-tickets input { width: 100%; min-height: 44px; padding: 7px 9px; color: var(--tg-text); background: var(--tg-secondary-bg); border: 1px solid var(--tg-separator); border-radius: 8px; text-align: center; }
+.booking-modal-content .modal-ok { min-height: 44px; }
+.calendar-slot.candidate { box-shadow: inset 0 0 0 2px var(--tg-accent); }
+@media (max-width: 430px) { .booking-date-row { gap: 8px; } .booking-time { width: 68px; } .booking-date { min-width: 82px; } }

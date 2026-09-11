@@ -37,8 +37,8 @@ h2 { margin-bottom: 12px; font-size: 18px; font-weight: 700; }
 .choice-calendar-arrow { font-size: 13px; line-height: 1; }
 .loading-activities { padding: 12px 4px; color: var(--tg-hint); text-align: center; font-size: 13px; }
 .section-head { display: flex; align-items: start; justify-content: center; gap: 12px; text-align: center; }
-.section-head h2 { margin-bottom: 0; }
-.legend { display: flex; flex-wrap: wrap; gap: 7px 12px; margin: 14px 0; color: var(--tg-hint); font-size: 11px; }
+.section-head h2 { margin-bottom: 0; text-align: center; }
+.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px 12px; margin: 14px 0; color: var(--tg-hint); font-size: 11px; }
 .legend span { display: inline-flex; align-items: center; gap: 5px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; }
 .dot.free { background: var(--free); } .dot.dio { background: var(--dio); } .dot.mk { background: var(--mk); } .dot.closed { background: var(--closed); } .dot.discuss { background: var(--tg-accent); }

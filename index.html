@@ -4,8 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="light dark">
   <title>Странные Вещи — запись</title>
   <link rel="stylesheet" href="style.css?v=2">
+  <style>
+    /* Calendar slots must be positioned inside their day column. */
+    .calendar-slot {
+      position: absolute !important;
+      left: 3px !important;
+      right: 3px !important;
+      width: auto !important;
+    }
+  </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -60,6 +70,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260911-5"></script>
+  <script src="app.js?v=20260911-6"></script>
 </body>
 </html>

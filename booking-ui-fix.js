@@ -1,0 +1,131 @@
+(function(){
+  function activityOf(s){
+    const a=norm(s?.activity||'');
+    if(a==='диоген')return'Диоген';
+    if(a==='обсудить заказ')return'Обсудить заказ';
+    if(a==='masterclass'||a==='мастер-класс')return'МК';
+    return norm(s?.format||'');
+  }
+  function isSelectedFlexible(s){
+    const target=selectedCalendar.format;
+    if(target==='Диоген')return activityOf(s)==='Диоген';
+    if(target==='Обсудить заказ')return activityOf(s)==='Обсудить заказ';
+    return false;
+  }
+  function ensureTicketControls(){
+    const input=document.getElementById('booking-tickets-input');
+    if(!input||document.getElementById('booking-tickets-minus'))return;
+    const wrap=document.createElement('div');
+    wrap.className='booking-tickets-control';
+    input.parentNode.insertBefore(wrap,input);
+    wrap.appendChild(input);
+    const minus=document.createElement('button');
+    minus.id='booking-tickets-minus';minus.type='button';minus.className='booking-ticket-step';minus.textContent='−';minus.setAttribute('aria-label','Уменьшить количество');
+    const plus=document.createElement('button');
+    plus.id='booking-tickets-plus';plus.type='button';plus.className='booking-ticket-step';plus.textContent='+';plus.setAttribute('aria-label','Увеличить количество');
+    wrap.insertBefore(minus,input);wrap.appendChild(plus);
+    minus.addEventListener('click',()=>{const min=Number(input.min)||1;input.value=String(Math.max(min,(Number(input.value)||min)-1));input.dispatchEvent(new Event('input',{bubbles:true}));});
+    plus.addEventListener('click',()=>{const max=Number(input.max)||1;input.value=String(Math.min(max,(Number(input.value)||0)+1));input.dispatchEvent(new Event('input',{bubbles:true}));});
+  }
+  function setupDurationControls(){
+    const controls=document.getElementById('booking-duration-controls'),wrap=document.querySelector('#booking-modal .booking-time-wrap');
+    if(!controls||!wrap)return;
+    if(controls.parentElement!==wrap)wrap.appendChild(controls);
+    controls.classList.add('booking-duration-inline');
+  }
+  function bookingMinTickets(){
+    if(!bookingState)return 1;
+    return bookingState.slot.occupied>0?1:(activityOf(bookingState.slot)==='МК'?2:1);
+  }
+  function bookingMaxTicketsFixed(){
+    if(!bookingState)return 0;
+    const {slot,start,end}=bookingState;
+    if(activityOf(slot)==='МК')return Math.max(0,Number(slot.free)||0);
+    const day=String(slot.start||'').split(' ')[0];
+    let max=Infinity;
+    for(let t=start;t<end;t+=60){
+      const part=bookingSlotByKey.get(slotKey(day,timeKey(t)))?.find(s=>isSelectedFlexible(s));
+      if(!part)return 0;
+      max=Math.min(max,Number(part.free)||0);
+    }
+    return Number.isFinite(max)?Math.max(0,max):0;
+  }
+  window.bookingMaxTickets=bookingMaxTicketsFixed;
+  function availableFlexibleEndFixed(slot,tickets=1){
+    const start=slotMinutes(slot),day=String(slot.start||'').split(' ')[0],ends=[];
+    for(let t=start+60;t<=CALENDAR_END_HOUR*60;t+=60){
+      const part=bookingSlotByKey.get(slotKey(day,timeKey(t-60)))?.find(s=>activityOf(s)===activityOf(slot));
+      if(!part||!part.available||Number(part.free||0)<tickets)break;
+      ends.push(t);
+    }
+    return ends;
+  }
+  window.availableFlexibleEnd=availableFlexibleEndFixed;
+  function renderBookingModalFixed(){
+    if(!bookingState)return;
+    const {slot,start,end}=bookingState;
+    const min=bookingMinTickets(),max=bookingMaxTicketsFixed();
+    document.getElementById('booking-start').textContent=timeKey(start);
+    document.getElementById('booking-end').textContent=timeKey(end);
+    document.getElementById('booking-date').textContent=formatBookingDate(slot.start);
+    document.getElementById('booking-title').textContent=activityOf(slot)==='МК'?'Мастер-класс':activityOf(slot);
+    document.getElementById('booking-submit').textContent=activityOf(slot)==='МК'?'Мастер-класс':activityOf(slot);
+    const eyebrow=document.querySelector('#booking-modal .eyebrow');if(eyebrow)eyebrow.classList.add('hidden');
+    setupDurationControls();
+    const controls=document.getElementById('booking-duration-controls');
+    const flexible=activityOf(slot)!=='МК';
+    controls.classList.toggle('hidden',!flexible);
+    const up=document.getElementById('booking-end-up'),down=document.getElementById('booking-end-down');
+    if(flexible){
+      const tickets=Math.max(min,Number(document.getElementById('booking-tickets-input')?.value)||min);
+      const ends=availableFlexibleEndFixed(slot,tickets);
+      up.disabled=!ends.includes(end+60);down.disabled=end<=start+60;
+      up.setAttribute('aria-disabled',String(up.disabled));down.setAttribute('aria-disabled',String(down.disabled));
+    }
+    ensureTicketControls();
+    const input=document.getElementById('booking-tickets-input');
+    input.min=String(min);input.max=String(Math.max(min,max));
+    let value=Number(input.value);
+    if(!Number.isInteger(value)||value<min)value=min;
+    if(value>max)value=max;
+    input.value=String(value);
+    const maxMark=document.getElementById('booking-max-mark');
+    if(max>=min && value===max){
+      if(!maxMark){const mark=document.createElement('span');mark.id='booking-max-mark';mark.className='booking-max-mark';mark.textContent='MAX';input.parentElement.appendChild(mark);}
+    }else if(maxMark)maxMark.remove();
+  }
+  window.renderBookingModal=renderBookingModalFixed;
+  function openBookingFixed(slot){
+    ensureBookingModal();
+    const activity=activityOf(slot);
+    const initial=slot.occupied>0?1:(activity==='МК'?2:1);
+    bookingState={slot,start:slotMinutes(slot),end:slotEndMinutes(slot),tickets:initial};
+    const start=slotMinutes(slot),defaultEnd=Math.min(start+60,slotEndMinutes(slot));
+    bookingState.end=activity==='МК'?slotEndMinutes(slot):defaultEnd;
+    document.getElementById('booking-activity').textContent=activity==='МК'?(selectedCalendar.name||slot.name||'Мастер-класс'):activity;
+    document.getElementById('booking-modal').classList.remove('hidden');
+    const input=document.getElementById('booking-tickets-input');
+    if(input)input.value=String(initial);
+    renderBookingModalFixed();
+  }
+  window.openBooking=openBookingFixed;
+  function changeFlexibleEndFixed(direction){
+    if(!bookingState||activityOf(bookingState.slot)==='МК')return;
+    const input=document.getElementById('booking-tickets-input'),tickets=Math.max(bookingMinTickets(),Number(input?.value)||bookingMinTickets());
+    const ends=availableFlexibleEndFixed(bookingState.slot,tickets),target=bookingState.end+direction*60;
+    if(target<bookingState.start+60||!ends.includes(target))return;
+    bookingState.end=target;renderBookingModalFixed();
+  }
+  window.changeFlexibleEnd=changeFlexibleEndFixed;
+  const observer=new MutationObserver(()=>{
+    const modal=document.getElementById('booking-modal');
+    if(modal&&!modal.classList.contains('hidden'))renderBookingModalFixed();
+  });
+  observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+  document.addEventListener('click',e=>{
+    const button=e.target.closest?.('#booking-end-up,#booking-end-down');
+    if(!button||button.disabled)return;
+    e.stopImmediatePropagation();
+    changeFlexibleEndFixed(button.id==='booking-end-up'?1:-1);
+  },true);
+})();

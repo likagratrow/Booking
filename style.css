@@ -27,6 +27,9 @@ h2 { margin-bottom: 12px; font-size: 18px; font-weight: 700; }
 .choice:active { transform: scale(.99); }
 .choice.choice-highlight { border-color: var(--tg-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--tg-accent) 20%, transparent); }
 .choice-icon { display: grid; place-items: center; width: 42px; height: 42px; color: var(--tg-button-text); font-size: 21px; background: var(--tg-accent); border-radius: 10px; }
+.choice-icon.dio { background: var(--dio); }
+.choice-icon.mk { background: var(--mk); }
+.choice-icon.discuss { background: var(--tg-accent); }
 .choice strong, .choice small { display: block; }
 .choice strong { margin-top: 1px; margin-bottom: 3px; font-size: 15px; }
 .choice small { color: var(--tg-hint); font-size: 12px; line-height: 1.35; }

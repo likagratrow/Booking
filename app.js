@@ -58,9 +58,12 @@ function slotDateTime(value){
   let m=raw.match(/^(\d{2})\.(\d{2})\.(\d{4})[ T](\d{1,2}):(\d{2})/);
   if(m)return{date:`${m[1]}.${m[2]}.${m[3]}`,minutes:Number(m[4])*60+Number(m[5])};
   m=raw.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})/);
-  if(m)return{date:`${m[3]}.${m[2]}.${m[1]}`,minutes:Number(m[4])*60+Number(m[5])};
+  if(m&&!/(?:Z|[+-]\d{2}:\d{2})$/i.test(raw))return{date:`${m[3]}.${m[2]}.${m[1]}`,minutes:Number(m[4])*60+Number(m[5])};
   const d=new Date(raw);
-  return Number.isNaN(d.getTime())?{date:'',minutes:NaN}:{date:dateString(d),minutes:d.getHours()*60+d.getMinutes()};
+  if(Number.isNaN(d.getTime()))return{date:'',minutes:NaN};
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Yekaterinburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d);
+  const values={};parts.forEach(part=>{if(part.type!=='literal')values[part.type]=part.value;});
+  return{date:`${values.day}.${values.month}.${values.year}`,minutes:Number(values.hour)*60+Number(values.minute)};
 }
 function slotDate(s){return slotDateTime(s?.start).date;}
 function slotTime(s){const m=slotDateTime(s?.start).minutes;return Number.isFinite(m)?timeKey(m):'';}

@@ -91,11 +91,11 @@ function closeEvents(){eventsModal.classList.add('hidden');}
 
 function slotForCell(date,hour){const start=hour*60;return bookingSlots.find(s=>slotDate(s)===date&&Number.isFinite(slotMinutes(s))&&Number.isFinite(slotEndMinutes(s))&&slotMinutes(s)<=start&&slotEndMinutes(s)>start)||null;}
 function freeWindowForCell(date,hour){const start=hour*60;return calendarConfig.freeWindows.find(window=>{const windowStart=slotDateTime(window?.start),windowEnd=slotDateTime(window?.end);return windowStart.date===date&&windowStart.minutes<=start&&windowEnd.minutes>=start+60;})||null;}
-function isWorkingInterval(date,start,end){for(let m=start;m<end;m+=60){if(!freeWindowForCell(date,Math.floor(m/60)))return false;}return true;}
+function isWorkingInterval(date,start,end,ignoreSlot=null){for(let m=start;m<end;m+=60){const hour=Math.floor(m/60);if(!freeWindowForCell(date,hour)&&slotForCell(date,hour)!==ignoreSlot)return false;}return true;}
 function selectedEvent(){return eventBySelection();}
 function selectedDuration(){const e=selectedEvent();return isDiogenActivity(selectedCalendar.activity)?60:parseDuration(e?.duration||'60');}
 function selectedFormat(){const existing=bookingSlots.find(s=>norm(s.activity)===norm(selectedCalendar.activity));return existing?.format||(isDiogenActivity(selectedCalendar.activity)?'Диоген':(activityByKey(selectedCalendar.activity)?.title||'МК'));}
-function rangeIsFree(date,start,end,ignoreSlot=null){if(!isWorkingInterval(date,start,end))return false;for(let m=start;m<end;m+=60){const slot=slotForCell(date,Math.floor(m/60));if(slot&&slot!==ignoreSlot)return false;}return end<=CALENDAR_END_HOUR*60;}
+function rangeIsFree(date,start,end,ignoreSlot=null){if(!isWorkingInterval(date,start,end,ignoreSlot))return false;for(let m=start;m<end;m+=60){const slot=slotForCell(date,Math.floor(m/60));if(slot&&slot!==ignoreSlot)return false;}return end<=CALENDAR_END_HOUR*60;}
 function selectedStartValid(date,start){if(!selectedCalendar.activity)return false;if(!isWorkingInterval(date,start,start+60))return false;if(slotForCell(date,Math.floor(start/60)))return false;const duration=selectedDuration();return rangeIsFree(date,start,start+duration);}
 function diogenEndOptions(date,start){const options=[];for(let end=start+60;end<=CALENDAR_END_HOUR*60;end+=60){if(!rangeIsFree(date,start,end))break;options.push(end);}return options;}
 function syntheticSlot(date,start,end){return{slotId:`new-${date}-${start}`,activity:selectedCalendar.activity,name:selectedCalendar.name||activityByKey(selectedCalendar.activity)?.title||'Запись',format:selectedFormat(),start:`${date} ${timeKey(start)}`,end:`${date} ${timeKey(end)}`,available:true,free:1,minTickets:1,capacity:1};}

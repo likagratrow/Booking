@@ -58,6 +58,8 @@ h2 { margin-bottom: 12px; font-size: 18px; font-weight: 700; }
 .calendar-cell-time { display: block; overflow: hidden; font-size: 9px; line-height: 1.1; white-space: nowrap; }
 .calendar-free { color: var(--tg-hint); }
 .calendar-free:hover, .calendar-free.selected-start { color: var(--tg-text); background: color-mix(in srgb, var(--free) 13%, var(--tg-bg)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--free) 60%, var(--tg-separator)); }
+.calendar-closed { color: var(--closed); background: color-mix(in srgb, var(--closed) 8%, var(--tg-bg)); cursor: default; }
+.calendar-closed .calendar-cell-time { opacity: .75; }
 .calendar-booked { z-index: 1; margin: 1px 2px; width: calc(100% - 4px); height: calc(100% - 2px); border: 1px solid var(--tg-separator); border-radius: 6px; }
 .calendar-booked strong { display: block; overflow: hidden; margin-top: 2px; font-size: 10px; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .calendar-booked small { display: block; margin-top: 1px; color: var(--tg-hint); font-size: 9px; line-height: 1.1; }

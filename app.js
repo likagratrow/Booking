@@ -34,7 +34,7 @@ const CALENDAR_START_HOUR=10;
 const CALENDAR_END_HOUR=20;
 const CALENDAR_DAYS=30;
 
-const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\\"/g,'&quot;').replace(/'/g,'&#039;');
+const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;');
 function parse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<=a)throw Error('Google Таблица не вернула данные.');return JSON.parse(t.slice(a,b+1));}
 function cell(c,i,f=''){return c[i]?.v??f;}
 function norm(v){return String(v??'').trim().toLowerCase();}

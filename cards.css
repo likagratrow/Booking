@@ -12,3 +12,93 @@
   text-align: center;
   overflow-wrap: anywhere;
 }
+.choice-book {
+  margin-top: auto;
+}
+.booking-title {
+  gap: 2px;
+}
+.booking-activity-name,
+.booking-event-name {
+  display: block;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.2;
+}
+.booking-event-name {
+  margin-bottom: 14px;
+}
+.booking-datetime {
+  justify-content: flex-start;
+}
+.booking-datetime > div {
+  flex: 0 0 auto;
+}
+.booking-datetime strong {
+  min-width: 48px;
+  font-size: 16px;
+}
+.booking-picker-control {
+  margin-bottom: 14px;
+}
+.booking-picker-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--tg-text);
+  font-size: 13px;
+  font-weight: 400;
+}
+.booking-picker {
+  position: relative;
+  height: 132px;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  border: 1px solid var(--tg-separator);
+  border-radius: 10px;
+  background: var(--tg-secondary-bg);
+  cursor: ns-resize;
+}
+.booking-picker::before,
+.booking-picker::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: 43px;
+  pointer-events: none;
+}
+.booking-picker::before {
+  top: 0;
+  background: linear-gradient(var(--tg-secondary-bg), transparent);
+}
+.booking-picker::after {
+  bottom: 0;
+  background: linear-gradient(transparent, var(--tg-secondary-bg));
+}
+.booking-picker-item {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 38px;
+  padding: 0;
+  color: var(--tg-hint);
+  background: transparent;
+  border: 0;
+  font-size: 15px;
+  line-height: 38px;
+  text-align: center;
+  cursor: pointer;
+}
+.booking-picker-item.active {
+  z-index: 3;
+  color: var(--tg-text);
+  background: color-mix(in srgb, var(--tg-accent) 12%, var(--tg-secondary-bg));
+  border-top: 1px solid var(--tg-accent);
+  border-bottom: 1px solid var(--tg-accent);
+  border-radius: 6px;
+  font-size: 21px;
+  font-weight: 700;
+}

@@ -165,6 +165,11 @@ function getBookingData() {
     );
   }
 
+  // Сохраняем старую механику календаря:
+  // большое окно "Свободно" перед чтением приводится
+  // к часовым участкам с шагом SLOT_STEP_MINUTES.
+  synchronizeCalendar();
+
   const events = readEvents(eventsSheet);
   const bookings = readBookings(bookingsSheet);
   const calendar = readCalendar();
@@ -2439,7 +2444,7 @@ function buildCalendarBookingDescription(
     capacity
   );
 
-  return lines.join('\n');
+  return lines.join('\\n');
 }
 
 

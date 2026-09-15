@@ -1,0 +1,14 @@
+/* Activity-card alignment only; leave all other UI untouched. */
+.choice {
+  align-items: center;
+  text-align: center;
+}
+.choice-icon {
+  align-self: center;
+}
+.choice-title {
+  width: 100%;
+  flex: 0 0 auto;
+  text-align: center;
+  overflow-wrap: anywhere;
+}

@@ -25,9 +25,11 @@
   margin: 0;
   font-size: 17px;
   line-height: 1.2;
+  font-weight: 400;
 }
 .booking-event-name {
   margin-bottom: 8px;
+  font-weight: 700;
 }
 .booking-datetime {
   display: flex;
@@ -35,7 +37,7 @@
   justify-content: flex-start;
   gap: 8px;
   margin-bottom: 8px;
-  min-height: 72px;
+  min-height: 56px;
 }
 .booking-datetime > div {
   flex: 0 0 auto;
@@ -47,6 +49,7 @@
 .booking-picker-label {
   font-size: 15px;
   line-height: 1.2;
+  font-weight: 400;
 }
 .booking-datetime strong {
   min-width: 48px;
@@ -62,7 +65,7 @@
 }
 .booking-date strong {
   display: block;
-  font-weight: 600;
+  font-weight: 400;
   text-transform: lowercase;
 }
 .booking-ticket-line {
@@ -71,14 +74,14 @@
   justify-content: flex-start;
   gap: 6px;
   margin-bottom: 8px;
-  min-height: 72px;
+  min-height: 56px;
 }
 .booking-picker-label {
   display: inline;
   flex: 0 0 auto;
   margin: 0;
   color: var(--tg-text);
-  font-weight: 600;
+  font-weight: 400;
 }
 .booking-picker-control {
   margin-bottom: 8px;
@@ -87,7 +90,7 @@
   position: relative;
   flex: 0 0 68px;
   width: 68px;
-  height: 72px;
+  height: 56px;
   overflow: hidden;
   touch-action: none;
   user-select: none;
@@ -103,7 +106,7 @@
   left: 0;
   right: 0;
   z-index: 2;
-  height: 18px;
+  height: 12px;
   pointer-events: none;
 }
 .booking-picker::before {
@@ -119,7 +122,7 @@
   top: 0;
   left: 0;
   width: 100%;
-  padding-top: 17px;
+  padding-top: 12px;
   box-sizing: border-box;
   will-change: transform;
 }
@@ -128,13 +131,13 @@
   z-index: 1;
   display: block;
   width: 100%;
-  height: 38px;
+  height: 28px;
   padding: 0;
   color: var(--tg-hint);
   background: transparent;
   border: 0;
   font-size: 15px;
-  line-height: 38px;
+  line-height: 28px;
   text-align: center;
   cursor: pointer;
   transform: none;
@@ -147,6 +150,10 @@
   border-bottom: 1px solid var(--tg-accent);
   border-radius: 6px;
   font-size: 18px;
+  font-weight: 400;
+}
+.booking-event-name,
+.booking-event-name strong {
   font-weight: 700;
 }
 .booking-hint {
@@ -154,4 +161,5 @@
   color: var(--tg-hint);
   font-size: 12px;
   min-height: 16px;
+  font-weight: 400;
 }

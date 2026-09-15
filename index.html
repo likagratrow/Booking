@@ -5,39 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>Странные Вещи — запись</title>
-  <link rel="stylesheet" href="style.css?v=20260914-1">
+  <link rel="stylesheet" href="style.css?v=20260915-1">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
   <main class="app">
-    <section class="card">
-      <h2 style="text-align: center;">Что хотите выбрать?</h2>
+    <section class="card activities-card">
       <div id="activities" class="choices"><div class="loading-activities">Загрузка...</div></div>
     </section>
     <section class="card calendar-card">
       <div class="section-head"><div><h2>Календарь</h2></div></div>
       <div class="legend">
-        <span><i class="dot free"></i> свободно</span><span><i class="dot dio"></i> Диоген</span><span><i class="dot mk"></i> МК</span><span><i class="dot closed"></i> закрыто</span><span><i class="dot discuss"></i> Обсудить заказ</span>
+        <span><i class="dot free"></i> свободно</span><span><i class="dot closed"></i> закрыто</span>
       </div>
       <div id="calendar" class="calendar"></div>
     </section>
   </main>
 
-  <div id="activity-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="activity-title">
+  <div id="activity-modal" class="modal activity-modal hidden" role="dialog" aria-modal="true" aria-labelledby="activity-title">
     <div class="modal-content"><button id="modal-close" class="modal-close" type="button" aria-label="Закрыть">×</button>
       <div id="activity-image-wrap" class="activity-image-wrap hidden"><img id="activity-image" class="activity-image" alt=""></div>
       <p class="eyebrow">ПОДРОБНЕЕ</p><h2 id="activity-title"></h2><p id="activity-description"></p><button id="modal-ok" class="modal-ok" type="button">Понятно</button>
     </div>
   </div>
 
-  <div id="events-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="events-title">
+  <div id="events-modal" class="modal events-modal hidden" role="dialog" aria-modal="true" aria-labelledby="events-title">
     <div class="events-modal-content"><button id="events-close" class="modal-close" type="button" aria-label="Закрыть">×</button><p class="eyebrow">ВЫБЕРИТЕ</p><h2 id="events-title"></h2><div id="events-list" class="events-list"></div></div>
   </div>
 
-  <div id="error-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="error-title">
+  <div id="error-modal" class="modal error-modal hidden" role="dialog" aria-modal="true" aria-labelledby="error-title">
     <div class="modal-content error-modal-content"><button class="modal-close" type="button" aria-label="Закрыть" onclick="document.getElementById('error-modal').classList.add('hidden')">×</button><p class="eyebrow">ОШИБКА</p><h2 id="error-title">Не получилось</h2><p id="error-text"></p><button id="error-ok" class="modal-ok" type="button">OK</button></div>
   </div>
 
-  <script src="app.js?v=20260914-2"></script>
+  <script src="app.js?v=20260915-1"></script>
 </body>
 </html>

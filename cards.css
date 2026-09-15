@@ -16,46 +16,53 @@
   margin-top: auto;
 }
 .booking-title {
-  gap: 2px;
+  gap: 1px;
+  margin-bottom: 8px;
 }
 .booking-activity-name,
 .booking-event-name {
   display: block;
   margin: 0;
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.2;
 }
 .booking-event-name {
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 .booking-datetime {
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 8px;
-  margin-bottom: 12px;
-  min-height: 132px;
+  margin-bottom: 8px;
+  min-height: 72px;
 }
 .booking-datetime > div {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
 }
+.booking-datetime strong,
+.booking-date strong,
+.booking-picker-label {
+  font-size: 15px;
+  line-height: 1.2;
+}
 .booking-datetime strong {
   min-width: 48px;
-  font-size: 16px;
 }
 .booking-dash {
   flex: 0 0 auto;
-  padding-bottom: 2px;
+  padding-bottom: 0;
   color: var(--tg-hint);
+  font-size: 15px;
 }
 .booking-date {
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 .booking-date strong {
   display: block;
-  font-size: 15px;
+  font-weight: 600;
   text-transform: lowercase;
 }
 .booking-ticket-line {
@@ -63,25 +70,24 @@
   align-items: center;
   justify-content: flex-start;
   gap: 6px;
-  margin-bottom: 14px;
-  min-height: 132px;
+  margin-bottom: 8px;
+  min-height: 72px;
 }
 .booking-picker-label {
   display: inline;
   flex: 0 0 auto;
   margin: 0;
   color: var(--tg-text);
-  font-size: 13px;
-  font-weight: 400;
+  font-weight: 600;
 }
 .booking-picker-control {
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 .booking-picker {
   position: relative;
   flex: 0 0 68px;
   width: 68px;
-  height: 132px;
+  height: 72px;
   overflow: hidden;
   touch-action: none;
   user-select: none;
@@ -97,7 +103,7 @@
   left: 0;
   right: 0;
   z-index: 2;
-  height: 43px;
+  height: 18px;
   pointer-events: none;
 }
 .booking-picker::before {
@@ -113,7 +119,7 @@
   top: 0;
   left: 0;
   width: 100%;
-  padding-top: 47px;
+  padding-top: 17px;
   box-sizing: border-box;
   will-change: transform;
 }
@@ -140,7 +146,7 @@
   border-top: 1px solid var(--tg-accent);
   border-bottom: 1px solid var(--tg-accent);
   border-radius: 6px;
-  font-size: 21px;
+  font-size: 18px;
   font-weight: 700;
 }
 .booking-hint {

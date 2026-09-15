@@ -165,11 +165,6 @@ function getBookingData() {
     );
   }
 
-  // Сохраняем старую механику календаря:
-  // большое окно "Свободно" перед чтением приводится
-  // к часовым участкам с шагом SLOT_STEP_MINUTES.
-  synchronizeCalendar();
-
   const events = readEvents(eventsSheet);
   const bookings = readBookings(bookingsSheet);
   const calendar = readCalendar();
@@ -1358,6 +1353,97 @@ function synchronizeCalendar() {
       );
     }
   );
+}
+
+
+// ============================================================
+// ФОНОВАЯ ОБСЛУЖИВАЮЩАЯ СИНХРОНИЗАЦИЯ
+// ============================================================
+
+function maintainCalendarFreeWindows() {
+
+  const calendar =
+    getBookingCalendar();
+
+  const now =
+    new Date();
+
+  const from =
+    startOfDay(now);
+
+  const to =
+    new Date(from);
+
+  to.setDate(
+    to.getDate() +
+    LOOKAHEAD_DAYS +
+    1
+  );
+
+  const events =
+    calendar.getEvents(
+      from,
+      to
+    );
+
+  const needsSynchronization =
+    events.some(
+      function(event) {
+        const title =
+          String(
+            event.getTitle() || ''
+          ).trim();
+
+        if (title !== FREE_EVENT_TITLE) {
+          return false;
+        }
+
+        const durationMinutes =
+          (
+            event.getEndTime().getTime() -
+            event.getStartTime().getTime()
+          ) / 60000;
+
+        return durationMinutes > SLOT_STEP_MINUTES;
+      }
+    );
+
+  if (!needsSynchronization) {
+    return;
+  }
+
+  synchronizeCalendar();
+}
+
+
+// ============================================================
+// НАСТРОЙКА ЕЖЕДНЕВНОГО ТРИГГЕРА ОБСЛУЖИВАНИЯ
+// ============================================================
+
+function setupCalendarMaintenanceTrigger() {
+
+  const handler =
+    'maintainCalendarFreeWindows';
+
+  const triggers =
+    ScriptApp.getProjectTriggers();
+
+  const alreadyExists =
+    triggers.some(
+      function(trigger) {
+        return trigger.getHandlerFunction() === handler;
+      }
+    );
+
+  if (alreadyExists) {
+    return;
+  }
+
+  ScriptApp.newTrigger(handler)
+    .timeBased()
+    .everyDays(1)
+    .atHour(3)
+    .create();
 }
 
 

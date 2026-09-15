@@ -29,27 +29,58 @@
   margin-bottom: 14px;
 }
 .booking-datetime {
+  display: flex;
+  align-items: center;
   justify-content: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  min-height: 132px;
 }
 .booking-datetime > div {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
 }
 .booking-datetime strong {
   min-width: 48px;
   font-size: 16px;
 }
-.booking-picker-control {
+.booking-dash {
+  flex: 0 0 auto;
+  padding-bottom: 2px;
+  color: var(--tg-hint);
+}
+.booking-date {
   margin-bottom: 14px;
 }
-.booking-picker-label {
+.booking-date strong {
   display: block;
-  margin-bottom: 5px;
+  font-size: 15px;
+  text-transform: lowercase;
+}
+.booking-ticket-line {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  margin-bottom: 14px;
+  min-height: 132px;
+}
+.booking-picker-label {
+  display: inline;
+  flex: 0 0 auto;
+  margin: 0;
   color: var(--tg-text);
   font-size: 13px;
   font-weight: 400;
 }
+.booking-picker-control {
+  margin-bottom: 14px;
+}
 .booking-picker {
   position: relative;
+  flex: 0 0 68px;
+  width: 68px;
   height: 132px;
   overflow: hidden;
   touch-action: none;
@@ -77,6 +108,15 @@
   bottom: 0;
   background: linear-gradient(transparent, var(--tg-secondary-bg));
 }
+.booking-picker-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding-top: 47px;
+  box-sizing: border-box;
+  will-change: transform;
+}
 .booking-picker-item {
   position: relative;
   z-index: 1;
@@ -84,7 +124,6 @@
   width: 100%;
   height: 38px;
   padding: 0;
-  transform: translateY(-29px);
   color: var(--tg-hint);
   background: transparent;
   border: 0;
@@ -92,6 +131,7 @@
   line-height: 38px;
   text-align: center;
   cursor: pointer;
+  transform: none;
 }
 .booking-picker-item.active {
   z-index: 3;
@@ -102,4 +142,10 @@
   border-radius: 6px;
   font-size: 21px;
   font-weight: 700;
+}
+.booking-hint {
+  margin: 0;
+  color: var(--tg-hint);
+  font-size: 12px;
+  min-height: 16px;
 }

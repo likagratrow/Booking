@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>Странные Вещи — запись</title>
-  <link rel="stylesheet" href="style.css?v=20260915-1">
+  <link rel="stylesheet" href="style.css?v=20260915-2">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -14,13 +14,16 @@
       <div id="activities" class="choices"><div class="loading-activities">Загрузка...</div></div>
     </section>
     <section class="card calendar-card">
-      <div class="section-head"><div><h2>Календарь</h2></div></div>
-      <div class="legend">
-        <span><i class="dot free"></i> свободно</span><span><i class="dot closed"></i> закрыто</span>
-      </div>
+      <div class="section-head"><div><h2 id="calendar-prompt" class="calendar-prompt">Выберите ↑</h2></div></div>
+      <div id="activity-legend" class="legend"></div>
       <div id="calendar" class="calendar"></div>
     </section>
   </main>
+
+  <div id="global-loader" class="global-loader hidden" aria-hidden="true">
+    <div class="global-spinner"></div>
+    <div id="global-loader-text" class="global-loader-text"></div>
+  </div>
 
   <div id="activity-modal" class="modal activity-modal hidden" role="dialog" aria-modal="true" aria-labelledby="activity-title">
     <div class="modal-content"><button id="modal-close" class="modal-close" type="button" aria-label="Закрыть">×</button>
@@ -37,6 +40,6 @@
     <div class="modal-content error-modal-content"><button class="modal-close" type="button" aria-label="Закрыть" onclick="document.getElementById('error-modal').classList.add('hidden')">×</button><p class="eyebrow">ОШИБКА</p><h2 id="error-title">Не получилось</h2><p id="error-text"></p><button id="error-ok" class="modal-ok" type="button">OK</button></div>
   </div>
 
-  <script src="app.js?v=20260915-1"></script>
+  <script src="app.js?v=20260915-2"></script>
 </body>
 </html>

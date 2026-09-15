@@ -84,6 +84,7 @@
   width: 100%;
   height: 38px;
   padding: 0;
+  transform: translateY(-29px);
   color: var(--tg-hint);
   background: transparent;
   border: 0;

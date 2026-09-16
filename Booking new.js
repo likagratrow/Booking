@@ -116,8 +116,10 @@ function syncCalendarBooking(event,start,end,bookings,operation){if(isDiogenActi
 function syncDiogenCalendarBooking(event,start,end,operation){
   if(!operation||!operation.action||!operation.bookingId)throw Error('Не определена операция Диогена.');
   const calendar=getBookingCalendar(),hours=getHourlyRanges(start,end),title=String(event.activity).trim()+' — '+String(event.name).trim(),states=[];
-  hours.forEach(function(h){
+  Logger.log('[DIOGEN TRACE] sync start | bookingId=%s | action=%s | start=%s | end=%s | hours=%s',String(operation.bookingId),String(operation.action),formatDateTime(start),formatDateTime(end),hours.map(function(h){return formatDateTime(h.start)+' -> '+formatDateTime(h.end);}).join(' || '));
+  hours.forEach(function(h,index){
     const matches=calendar.getEvents(h.start,h.end).filter(function(e){if(!isBookingCalendarEvent(e))return false;const p=parseCalendarSlotId(e.getDescription()),t=String(e.getTitle()||'').trim();return Boolean(p&&calendarSlotMatchesEvent(p,event))||t===title;});
+    Logger.log('[DIOGEN TRACE] hour #%s | requested=%s -> %s | matching=%s | ids=%s',index+1,formatDateTime(h.start),formatDateTime(h.end),matches.length,matches.map(function(e){return e.getId()+' ['+formatDateTime(e.getStartTime())+' -> '+formatDateTime(e.getEndTime())+']';}).join(' || '));
     if(matches.length>1)throw Error('В календаре найдено несколько записей Диогена для '+formatDateTime(h.start)+'.');
     const ce=matches[0]||null;
     const otherBookings=calendar.getEvents(h.start,h.end).some(function(e){
@@ -147,11 +149,18 @@ function syncDiogenCalendarBooking(event,start,end,operation){
       states.push({hour:h,event:ce,state:state,entry:entry});
     }else throw Error('Неизвестная операция Диогена: '+operation.action);
   });
-  states.forEach(function(x){
+  states.forEach(function(x,index){
     if(operation.action==='book'){
       const tickets=Number(operation.tickets),entry={bookingId:String(operation.bookingId),telegramName:String(operation.telegramName||''),tickets:tickets};
-      if(x.event){x.state.entries.push(entry);x.state.occupancy+=tickets;x.event.setTitle(title);x.event.setDescription(buildDiogenCalendarDescription(event,x.hour.start,x.state));}
-      else{const state={entries:[entry],occupancy:tickets,capacity:getCapacity(event)};calendar.createEvent(title,x.hour.start,x.hour.end,{description:buildDiogenCalendarDescription(event,x.hour.start,state)});}
+      if(x.event){
+        Logger.log('[DIOGEN TRACE] update existing | hour #%s | id=%s | before=%s -> %s | target=%s -> %s',index+1,x.event.getId(),formatDateTime(x.event.getStartTime()),formatDateTime(x.event.getEndTime()),formatDateTime(x.hour.start),formatDateTime(x.hour.end));
+        x.state.entries.push(entry);x.state.occupancy+=tickets;x.event.setTitle(title);x.event.setDescription(buildDiogenCalendarDescription(event,x.hour.start,x.state));
+        Logger.log('[DIOGEN TRACE] updated existing | id=%s | after=%s -> %s',x.event.getId(),formatDateTime(x.event.getStartTime()),formatDateTime(x.event.getEndTime()));
+      }else{
+        Logger.log('[DIOGEN TRACE] CREATE | hour #%s | requested=%s -> %s',index+1,formatDateTime(x.hour.start),formatDateTime(x.hour.end));
+        const created=calendar.createEvent(title,x.hour.start,x.hour.end,{description:buildDiogenCalendarDescription(event,x.hour.start,{entries:[entry],occupancy:tickets,capacity:getCapacity(event)})});
+        Logger.log('[DIOGEN TRACE] CREATED | id=%s | actual=%s -> %s | durationMin=%s',created.getId(),formatDateTime(created.getStartTime()),formatDateTime(created.getEndTime()),Math.round((created.getEndTime().getTime()-created.getStartTime().getTime())/60000));
+      }
     }else{
       x.state.entries=x.state.entries.filter(function(e){return String(e.bookingId)!==String(operation.bookingId);});
       x.state.occupancy=Math.max(0,x.state.occupancy-Number(operation.tickets));
@@ -159,6 +168,7 @@ function syncDiogenCalendarBooking(event,start,end,operation){
     }
   });
   synchronizeCalendar();
+  Logger.log('[DIOGEN TRACE] sync end | bookingId=%s | action=%s',String(operation.bookingId),String(operation.action));
 }
 function parseDiogenCalendarState(description,fallbackCapacity){
   const lines=String(description||'').split('\n'),first=lines.shift()||'';if(first.indexOf(BOOKING_MARKER)!==0)return null;

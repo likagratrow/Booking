@@ -120,6 +120,12 @@ function syncDiogenCalendarBooking(event,start,end,operation){
     const matches=calendar.getEvents(h.start,h.end).filter(function(e){if(!isBookingCalendarEvent(e))return false;const p=parseCalendarSlotId(e.getDescription()),t=String(e.getTitle()||'').trim();return Boolean(p&&calendarSlotMatchesEvent(p,event))||t===title;});
     if(matches.length>1)throw Error('В календаре найдено несколько записей Диогена для '+formatDateTime(h.start)+'.');
     const ce=matches[0]||null;
+    const otherBookings=calendar.getEvents(h.start,h.end).some(function(e){
+      if(!isBookingCalendarEvent(e))return false;
+      const p=parseCalendarSlotId(e.getDescription()),t=String(e.getTitle()||'').trim();
+      return !(Boolean(p&&calendarSlotMatchesEvent(p,event))||t===title);
+    });
+    if(otherBookings)throw Error('В выбранном интервале есть бронь другого мероприятия.');
     if(operation.action==='book'){
       if(ce){
         const state=parseDiogenCalendarState(ce.getDescription(),getCapacity(event));

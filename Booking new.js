@@ -139,13 +139,13 @@ function createBooking(data) {
 
     affectedHours.forEach(function(hour) {
       if (intersectsAnyBlock(hour.start,hour.end,calendar.blocks)) throw new Error('В выбранном интервале есть занятое время.');
-      const hourBookings = getBookingsForExactSlot(bookings,hour.start,event);
-      const occupancy = calculateOccupancy(hourBookings);
-      if (occupancy > 0) hasExistingOccupancy = true;
+      const calendarOccupancy = getCalendarBookingOccupancy(calendar.events,hour.start,hour.end,event);
+      const occupancy = calendarOccupancy.exists ? calendarOccupancy.occupied : 0;
+      if (calendarOccupancy.exists) hasExistingOccupancy = true;
       const free = Math.max(0,capacity-occupancy);
       if (free <= 0) throw new Error('В выбранном интервале есть час без свободных мест.');
       if (tickets > free) throw new Error('В одном из выбранных часов свободно только '+free+' мест.');
-      if (occupancy === 0 && !hasFreeCalendarHours(hour.start,1,calendar.freeWindows,calendar.blocks)) throw new Error('Один из выбранных часов больше недоступен.');
+      if (!calendarOccupancy.exists && !hasFreeCalendarHours(hour.start,1,calendar.freeWindows,calendar.blocks)) throw new Error('Один из выбранных часов больше недоступен.');
     });
 
     const configuredMin = event.min;
@@ -338,6 +338,31 @@ function readCalendar() {
     else if(!item.isBooking) blocks.push({id:item.id,title:title||'Занято',start:item.start,end:item.end});
   });
   return {events:events,freeWindows:freeWindows,blocks:blocks};
+}
+
+function getCalendarBookingOccupancy(calendarEvents,start,end,event) {
+  const capacity=getCapacity(event);
+  const targetName=String(event.name||'').trim();
+  const expectedTitle=getFormat(event)==='МК'?'МК — '+targetName:'Диоген — '+targetName;
+  const matches=(calendarEvents||[]).filter(function(item){
+    if(!item||!item.isBooking)return false;
+    const itemStart=new Date(item.start),itemEnd=new Date(item.end);
+    if(isNaN(itemStart.getTime())||isNaN(itemEnd.getTime()))return false;
+    if(itemStart.getTime()>=end.getTime()||itemEnd.getTime()<=start.getTime())return false;
+    if(String(item.title||'').trim()!==expectedTitle)return false;
+    return true;
+  });
+  if(!matches.length)return{exists:false,occupied:0,capacity:capacity};
+  const occupancyValues=matches.map(function(item){
+    const text=String(item.description||'');
+    const found=[...text.matchAll(/(\d+)\s*\/\s*(\d+)\s*$/gm)];
+    if(!found.length)return null;
+    const last=found[found.length-1];
+    return{occupied:Number(last[1]),capacity:Number(last[2])};
+  }).filter(Boolean);
+  if(!occupancyValues.length)return{exists:true,occupied:0,capacity:capacity};
+  const occupancy=occupancyValues[0];
+  return{exists:true,occupied:Math.max(0,occupancy.occupied),capacity:occupancy.capacity>0?occupancy.capacity:capacity};
 }
 
 function getBookingCalendar() {

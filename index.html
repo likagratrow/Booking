@@ -37,7 +37,7 @@
   </div>
 
   <div id="error-modal" class="modal error-modal hidden" role="dialog" aria-modal="true" aria-labelledby="error-title">
-    <div class="modal-content error-modal-content"><button class="modal-close" type="button" aria-label="Закрыть" onclick="document.getElementById('error-modal').classList.add('hidden')">×</button><p class="eyebrow">ОШИБКА</p><h2 id="error-title">Не получилось</h2><p id="error-text"></p><button id="error-ok" class="modal-ok" type="button">OK</button></div>
+    <div class="modal-content error-modal-content"><button class="modal-close" type="button" aria-label="Закрыть" onclick="document.getElementById('error-modal').classList.add('hidden')">×</button><p class="eyebrow">ОШИБКА</p><h2 id="error-title">Не получилось</h2><p id="error-text"></p><button id="error-ok" class="modal-ok" type="button" onclick="window.location.reload()">Перезагрузить</button></div>
   </div>
 
   <script src="app.js"></script>

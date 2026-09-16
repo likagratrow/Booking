@@ -1,0 +1,52 @@
+name: Apply booking partial-add fix
+on:
+  push:
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'Fix booking partial add'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch booking logic
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p=Path('Booking new.js')
+          s=p.read_text()
+          old="""function getCalendarBookingOccupancy(items,start,end,event){const matches=(items||[]).filter(function(i){if(!i||!i.isBooking)return false;const s=new Date(i.start),e=new Date(i.end);if(s>=end||e<=start)return false;const parsed=parseCalendarSlotId(i.description);return parsed&&calendarSlotMatchesEvent(parsed,event);});if(!matches.length)return{exists:false,occupied:0,capacity:getCapacity(event)};"""
+          new="""function getCalendarBookingOccupancy(items,start,end,event){const matches=(items||[]).filter(function(i){if(!i||!i.isBooking)return false;const s=new Date(i.start),e=new Date(i.end);if(s>=end||e<=start)return false;const parsed=parseCalendarSlotId(i.description),title=String(i.title||'').trim(),expected=String(event.activity).trim()+' — '+String(event.name).trim();return(Boolean(parsed&&calendarSlotMatchesEvent(parsed,event))||title===expected);});if(!matches.length)return{exists:false,occupied:0,capacity:getCapacity(event)};"""
+          if old not in s: raise SystemExit('Backend occupancy pattern not found')
+          s=s.replace(old,new,1)
+          old="""function syncCalendarBooking(event,start,end,bookings){const calendar=getBookingCalendar(),existing=calendar.getEvents(start,end).filter(function(e){if(!isBookingCalendarEvent(e))return false;const p=parseCalendarSlotId(e.getDescription());return p&&calendarSlotMatchesEvent(p,event);});"""
+          new="""function syncCalendarBooking(event,start,end,bookings){const calendar=getBookingCalendar(),existing=calendar.getEvents(start,end).filter(function(e){if(!isBookingCalendarEvent(e))return false;const p=parseCalendarSlotId(e.getDescription()),title=String(e.getTitle()||'').trim(),expected=String(event.activity).trim()+' — '+String(event.name).trim();return(Boolean(p&&calendarSlotMatchesEvent(p,event))||title===expected);});"""
+          if old not in s: raise SystemExit('Backend sync pattern not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+
+          p=Path('app.js')
+          s=p.read_text()
+          old="""function handleJoinableCell(date,hour){const event=bookingEventsForCell(date,hour).find(bookingEventJoinable);if(!event)return;openExistingBooking(event);}"""
+          new="""function handleJoinableCell(date,hour){const event=bookingEventsForCell(date,hour).find(bookingEventJoinable);if(!event)return;openExistingBooking(event,date,hour);}"""
+          if old not in s: raise SystemExit('Joinable handler pattern not found')
+          s=s.replace(old,new,1)
+          old="""function openExistingBooking(event){if(!event||eventHasStarted(event))return;const name=bookingEventName(event);const eventData=eventForContext({name});if(!eventData)return;const occupancy=bookingEventOccupancy(event);const free=Math.max(0,Number(occupancy?.capacity||0)-Number(occupancy?.occupied||0));if(free<1)return;const context={activity:eventData.activity,name:eventData.name};const date=eventDate(event),start=eventStartMinutes(event),end=eventEndMinutes(event);if(!date||!Number.isFinite(start)||!Number.isFinite(end)||end<=start)return;const slot=bookingPayload(date,start,end,context);slot.name=eventData.name;slot.free=free;slot.capacity=Number(occupancy.capacity);slot.minTickets=1;slot.available=true;openBooking(slot,{diogen:false,endOptions:[end],context});}"""
+          new="""function openExistingBooking(event,clickedDate='',clickedHour=NaN){if(!event||eventHasStarted(event))return;const name=bookingEventName(event);const eventData=eventForContext({name});if(!eventData)return;const occupancy=bookingEventOccupancy(event);const free=Math.max(0,Number(occupancy?.capacity||0)-Number(occupancy?.occupied||0));if(free<1)return;const context={activity:eventData.activity,name:eventData.name};const date=eventDate(event),existingStart=eventStartMinutes(event),existingEnd=eventEndMinutes(event);if(!date||!Number.isFinite(existingStart)||!Number.isFinite(existingEnd)||existingEnd<=existingStart)return;const diogen=isDiogenActivity(context.activity);const start=diogen&&clickedDate===date&&Number.isFinite(clickedHour)?Math.max(existingStart,Number(clickedHour)*60):existingStart;if(start>=existingEnd)return;const endOptions=diogen?diogenEndOptions(date,start,context).filter(x=>x<=existingEnd):[existingEnd];if(!endOptions.length)return;const slot=bookingPayload(date,start,endOptions[endOptions.length-1],context);slot.name=eventData.name;slot.free=free;slot.capacity=Number(occupancy.capacity);slot.minTickets=1;slot.available=true;openBooking(slot,{diogen,endOptions,context});}"""
+          if old not in s: raise SystemExit('Existing booking pattern not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add 'Booking new.js' app.js
+          git diff --cached --quiet || git commit -m 'Fix booking partial add'
+          git push
+      - name: Remove temporary workflow
+        if: success()
+        run: |
+          git rm .github/workflows/patch-booking.yml
+          git commit -m 'Remove temporary booking patch workflow'
+          git push

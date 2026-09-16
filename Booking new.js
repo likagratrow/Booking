@@ -91,7 +91,7 @@ function readBookings(sheet){
   if(sheet.getLastRow()<2)return[];const m=getBookingColumnMap(sheet),rows=sheet.getRange(2,1,sheet.getLastRow()-1,10).getValues();
   return rows.map(function(r){return bookingFromRow(r,m);}).filter(function(b){return b.id!==''&&b.id!==null;});
 }
-function normalizeStatus(v){const s=String(v||'').trim().toLowerCase();if(s==='cancelled'||s==='canceled')return'cancel';return s||'active';}
+function normalizeStatus(v){return String(v||'').trim()||'active';}
 function resolveTelegramName(data){const username=String(data.telegramName||data.username||'').trim();if(username)return username.charAt(0)==='@'?username:'@'+username;return String(data.name||'').trim().replace(/^@/,'');}
 
 function findEventByIdentity(events,activity,name){const a=String(activity||'').trim(),n=String(name||'').trim(),matches=events.filter(function(e){return String(e.name).trim()===n;});if(a){const exact=matches.filter(function(e){return String(e.activity).trim()===a;});if(exact.length===1)return exact[0];}if(matches.length===1)return matches[0];return null;}

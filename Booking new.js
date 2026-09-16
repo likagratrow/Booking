@@ -277,9 +277,6 @@ function createBooking(data) {
       );
     }
 
-    const format =
-      normalizeFormat(data.format);
-
     const eventName =
       String(
         data.eventName || ''
@@ -295,16 +292,32 @@ function createBooking(data) {
         data.time || ''
       ).trim();
 
+    if (!eventName) {
+      throw new Error(
+        'Не указано мероприятие.'
+      );
+    }
+
     if (!date || !time) {
       throw new Error(
         'Не указаны дата и время.'
       );
     }
 
-    const event = findEvent(
+    /*
+     * Имя мероприятия — основной идентификатор.
+     *
+     * Формат из клиента не является источником истины:
+     * он используется только как безопасный способ
+     * снять неоднозначность, если в листе есть одинаковые
+     * названия мероприятий в разных активностях.
+     * Итоговые activity/format всегда берутся из строки
+     * листа "Ивенты".
+     */
+    const event = findEventByName(
       events,
-      format,
-      eventName
+      eventName,
+      data.format
     );
 
     if (!event) {
@@ -312,6 +325,8 @@ function createBooking(data) {
         'Выбранное мероприятие не найдено.'
       );
     }
+
+    const format = getFormat(event);
 
     const slotStart =
       parseBookingDateTime(
@@ -1017,6 +1032,50 @@ function findEvent(
       );
     }
   ) || null;
+}
+
+
+function findEventByName(
+  events,
+  eventName,
+  formatHint
+) {
+
+  const name = String(eventName || '').trim();
+
+  const matches = events.filter(
+    function(event) {
+      return String(event.name || '').trim() === name;
+    }
+  );
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  if (matches.length === 1) {
+    return matches[0];
+  }
+
+  const hintedFormat = normalizeFormat(formatHint);
+
+  if (hintedFormat) {
+    const hinted = matches.filter(
+      function(event) {
+        return getFormat(event) === hintedFormat;
+      }
+    );
+
+    if (hinted.length === 1) {
+      return hinted[0];
+    }
+  }
+
+  throw new Error(
+    'Найдено несколько мероприятий с названием "' +
+    name +
+    '". Не удалось однозначно определить активность.'
+  );
 }
 
 

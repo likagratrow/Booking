@@ -61,8 +61,7 @@ function eventForActivity(key){return events.find(e=>norm(e.activity)===norm(key
 function isDiogenActivity(key){const activity=activityByKey(key);if(!activity)return false;return norm(activity.title)==='диоген'||norm(activity.key)==='диоген';}
 function selectedFormat(){const activity=activityByKey(selectedCalendar.activity);return activity?.title||activity?.key||'';}
 function activityColor(key){return activityByKey(key)?.color||'';}
-function eventActivity(event){const source=norm(event?.title||'');const prefix=source.split('—')[0].trim();return activities.find(a=>norm(a.key)===prefix||norm(a.title)===prefix)||null;}
-function eventColor(event){return eventActivity(event)?.color||'';}
+function eventColor(event){const name=bookingEventName(event);const eventData=events.find(item=>norm(item.name)===norm(name));return activityColor(eventData?.activity);}
 function activityStyle(color){return color?` style="background:${esc(color)}"`:'';}
 function eventStyle(color){return color?` style="--activity-color:${esc(color)};background:color-mix(in srgb,${esc(color)} 20%,var(--tg-bg));border:2px solid ${esc(color)}"`:'';}
 function eventHasStarted(event){const p=slotDateTime(event?.start);if(!p.date||!Number.isFinite(p.minutes))return false;const [d,m,y]=p.date.split('.').map(Number);const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Yekaterinburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());const v={};parts.forEach(x=>{if(x.type!=='literal')v[x.type]=x.value;});const nowKey=Date.UTC(Number(v.year),Number(v.month)-1,Number(v.day),Number(v.hour),Number(v.minute));const eventKey=Date.UTC(y,m-1,d,Math.floor(p.minutes/60),p.minutes%60);return eventKey<=nowKey;}

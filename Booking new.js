@@ -13,7 +13,7 @@ const LOOKAHEAD_DAYS=30;
 const BOOKING_MARKER='ST_BOOKING_SLOT:';
 const DIOGEN_ENTRY_MARKER='ST_BOOKING_ENTRY:';
 
-function doGet(){try{return jsonResponse(getBookingData());}catch(e){return jsonResponse({ok:false,error:e.message});}}
+function doGet(e){try{if(String(e?.parameter?.action||'')==='normalize-free'){const lock=LockService.getScriptLock();lock.waitLock(30000);try{journalLog('NORMALIZE START','background free-slot normalization');synchronizeCalendar();journalLog('NORMALIZE END','background free-slot normalization');return jsonResponse({ok:true});}finally{lock.releaseLock();}}return jsonResponse(getBookingData());}catch(e){journalLog('GET ERROR','message='+String(e&&e.message||e));return jsonResponse({ok:false,error:e.message});}}
 function doPost(e){try{journalLog('POST RECEIVED','hasPostData='+Boolean(e&&e.postData&&e.postData.contents));if(!e?.postData?.contents)throw Error('Не получены данные POST-запроса.');const data=JSON.parse(e.postData.contents);journalLog('POST PARSED','action='+String(data.action||'')+' | activity='+String(data.activity||'')+' | eventName='+String(data.eventName||''));if(data.action==='book')return jsonResponse(createBooking(data));if(data.action==='cancel')return jsonResponse(cancelBooking(data));throw Error('Неизвестное действие: '+data.action);}catch(e){journalLog('POST ERROR','message='+String(e&&e.message||e));return jsonResponse({ok:false,error:e.message});}}
 function jsonResponse(data){return ContentService.createTextOutput(JSON.stringify(data,null,2)).setMimeType(ContentService.MimeType.JSON);}
 
@@ -29,7 +29,9 @@ function createBooking(data){
   try{
     const ss=SpreadsheetApp.getActiveSpreadsheet(),es=ss.getSheetByName(EVENTS_SHEET_NAME),bs=ss.getSheetByName(BOOKING_SHEET_NAME);
     if(!es||!bs)throw Error('Не найден лист бронирований или мероприятий.');
-    const events=readEvents(es),bookings=readBookings(bs),calendar=readCalendar();
+    const events=readEvents(es),bookings=readBookings(bs);
+    synchronizeCalendar();
+    const calendar=readCalendar();
     const tickets=Number(data.tickets);if(!Number.isInteger(tickets)||tickets<1)throw Error('Количество билетов должно быть целым числом от 1.');
     const telegramId=String(data.telegramId??'').trim();if(!telegramId)throw Error('Не указан Telegram ID.');
     const telegramName=resolveTelegramName(data);if(!telegramName)throw Error('Не указано имя Telegram пользователя.');

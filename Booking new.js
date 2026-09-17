@@ -53,7 +53,7 @@ function createBooking(data){
       if(tickets>free)throw Error('В одном из выбранных часов свободно только '+free+' мест.');
       if(!occ.exists&&!hasFreeCalendarHours(h.start,1,calendar.freeWindows,calendar.blocks))throw Error('Один из выбранных часов больше недоступен.');
     });
-    if(!hasExisting){const min=Number(event.min);if(!Number.isFinite(min)||min<1)throw Error('Для выбранного мероприятия не задано минимальное количество мест.');if(tickets<min)throw Error('Для нового мероприятия нужно забронировать минимум '+min+' мест.');}
+    if(!hasExisting){const min=Number(event.min);if(!Number.isFinite(min)||min<1)throw Error('Для нового мероприятия не задано минимальное количество мест.');if(tickets<min)throw Error('Для нового мероприятия нужно забронировать минимум '+min+' мест.');}
     hours.forEach(function(h){getAllBookingsAtStart(bookings,h.start).forEach(function(b){if(!sameEvent(b,event))throw Error('Это время уже занято другим мероприятием.');});});
     const id=getNextBookingId(bs),slotId=makeBookingSlotId(event,start,end);
     bs.appendRow([id,telegramId,telegramName,String(event.activity).trim(),String(event.name).trim(),date,time,tickets,'active',slotId]);
@@ -124,22 +124,29 @@ function isDiogenActivity(activityKey){
   return keys.some(function(r){return String(r[0]||'').trim().toLowerCase()===key;});
 }
 
-function syncCalendarBooking(event,start,end,bookings,operation){const activityKey=String(operation&&operation.activityKey||event.activity||'').trim();if(isDiogenActivity(activityKey))return syncDiogenCalendarBooking(event,start,end,operation);const calendar=getBookingCalendar(),existing=calendar.getEvents(start,end).filter(function(e){if(!isBookingCalendarEvent(e))return false;const p=parseCalendarSlotId(e.getDescription()),title=String(e.getTitle()||'').trim(),expected=String(event.activity).trim()+' — '+String(event.name).trim();return(Boolean(p&&calendarSlotMatchesEvent(p,event))||title===expected);});let ce=existing[0]||null,baseStart=start,baseEnd=end;if(ce){const p=parseCalendarSlotId(ce.getDescription()),parsedStart=p&&p.start?parseCompactDateTime(p.start):null;if(parsedStart){baseStart=parsedStart;baseEnd=ce.getEndTime();}}const active=getBookingsForExactSlot(bookings,baseStart,event),occupancy=calculateOccupancy(active);if(occupancy<=0){existing.forEach(function(e){e.deleteEvent();});restoreFreeHours(baseStart,baseEnd);synchronizeCalendar();return;}const title=String(event.activity).trim()+' — '+String(event.name).trim(),description=buildCalendarDescription(event,baseStart,bookings);existing.slice(1).forEach(function(e){e.deleteEvent();});if(!ce)ce=calendar.createEvent(title,baseStart,baseEnd,{description:description});else{ce.setTitle(title);ce.setDescription(description);}synchronizeCalendar();}
+function syncCalendarBooking(event,start,end,bookings,operation){const activityKey=String(operation&&operation.activityKey||event.activity||'').trim();if(isDiogenActivity(activityKey))return syncDiogenCalendarBooking(event,start,end,bookings,operation);const calendar=getBookingCalendar(),existing=calendar.getEvents(start,end).filter(function(e){if(!isBookingCalendarEvent(e))return false;const p=parseCalendarSlotId(e.getDescription()),title=String(e.getTitle()||'').trim(),expected=String(event.activity).trim()+' — '+String(event.name).trim();return(Boolean(p&&calendarSlotMatchesEvent(p,event))||title===expected);});let ce=existing[0]||null,baseStart=start,baseEnd=end;if(ce){const p=parseCalendarSlotId(ce.getDescription()),parsedStart=p&&p.start?parseCompactDateTime(p.start):null;if(parsedStart){baseStart=parsedStart;baseEnd=ce.getEndTime();}}const active=getBookingsForExactSlot(bookings,baseStart,event),occupancy=calculateOccupancy(active);if(occupancy<=0){existing.forEach(function(e){e.deleteEvent();});restoreFreeHours(baseStart,baseEnd);synchronizeCalendar();return;}const title=String(event.activity).trim()+' — '+String(event.name).trim(),description=buildCalendarDescription(event,baseStart,bookings);existing.slice(1).forEach(function(e){e.deleteEvent();});if(!ce)ce=calendar.createEvent(title,baseStart,baseEnd,{description:description});else{ce.setTitle(title);ce.setDescription(description);}synchronizeCalendar();}
 
-function syncDiogenCalendarBooking(event,start,end,operation){
+function syncDiogenCalendarBooking(event,start,end,bookings,operation){
   if(!operation||!operation.action||!operation.bookingId)throw Error('Не определена операция Диогена.');
   const calendar=getBookingCalendar(),hours=getHourlyRanges(start,end),title=String(event.activity).trim()+' — '+String(event.name).trim(),states=[];
   journalLog('DIOGEN SYNC START','bookingId='+String(operation.bookingId)+' | action='+String(operation.action)+' | start='+formatDateTime(start)+' | end='+formatDateTime(end)+' | hours='+hours.map(function(h){return formatDateTime(h.start)+' -> '+formatDateTime(h.end);}).join(' || '));
-  hours.forEach(function(h,index){
-    const matches=calendar.getEvents(h.start,h.end).filter(function(e){if(!isBookingCalendarEvent(e))return false;const p=parseCalendarSlotId(e.getDescription());return Boolean(p&&calendarSlotMatchesEvent(p,event));});
+  hours.forEach(function(h){
+    const all=calendar.getEvents(h.start,h.end),matches=all.filter(function(e){if(!isBookingCalendarEvent(e))return false;const p=parseCalendarSlotId(e.getDescription());return Boolean(p&&calendarSlotMatchesEvent(p,event));});
+    let ce=matches.length===1?matches[0]:null;
     if(matches.length>1)throw Error('В календаре найдено несколько записей Диогена для '+formatDateTime(h.start)+'.');
-    let ce=matches[0]||null,state=null;
+    if(!ce){
+      const titleMatches=all.filter(function(e){return String(e.getTitle()||'').trim()===title&&e.getStartTime().getTime()===h.start.getTime()&&e.getEndTime().getTime()===h.end.getTime();});
+      if(titleMatches.length>1)throw Error('В календаре найдено несколько часов Диогена для '+formatDateTime(h.start)+'.');
+      if(titleMatches.length===1)ce=titleMatches[0];
+    }
+    let state=null;
     if(operation.action==='book'){
       if(ce){
         state=parseDiogenCalendarState(ce.getDescription(),getCapacity(event));
+        if(!state)state=buildDiogenStateFromBookings(bookings,event,h,operation.bookingId);
         if(!state)throw Error('Не удалось прочитать состояние часа Диогена '+formatDateTime(h.start)+'.');
       }else{
-        const free=calendar.getEvents(h.start,h.end).filter(function(e){return String(e.getTitle()||'').trim()===FREE_EVENT_TITLE&&e.getStartTime().getTime()===h.start.getTime()&&e.getEndTime().getTime()===h.end.getTime();});
+        const free=all.filter(function(e){return String(e.getTitle()||'').trim()===FREE_EVENT_TITLE&&e.getStartTime().getTime()===h.start.getTime()&&e.getEndTime().getTime()===h.end.getTime();});
         if(free.length!==1)throw Error('Не найдено ровно одно свободное часовое событие Диогена: '+formatDateTime(h.start)+'.');
         ce=free[0];
         state={entries:[],occupancy:0,capacity:getCapacity(event)};
@@ -149,10 +156,10 @@ function syncDiogenCalendarBooking(event,start,end,operation){
     }else if(operation.action==='cancel'){
       if(!ce)throw Error('В календаре не найдена запись Диогена для отменяемой брони: '+formatDateTime(h.start)+'.');
       state=parseDiogenCalendarState(ce.getDescription(),getCapacity(event));
+      if(!state)state=buildDiogenStateFromBookings(bookings,event,h,operation.bookingId);
       if(!state)throw Error('Не удалось прочитать состояние часа Диогена '+formatDateTime(h.start)+'.');
       const entry=state.entries.find(function(x){return String(x.bookingId)===String(operation.bookingId);});
-      if(!entry)throw Error('В календаре не найдена отменяемая бронь Диогена для '+formatDateTime(h.start)+'.');
-      if(Number(entry.tickets)!==Number(operation.tickets))throw Error('Количество мест отменяемой брони не совпадает с данными календаря.');
+      if(operation.action==='cancel'&&!entry){state.entries.push({bookingId:String(operation.bookingId),tickets:Number(operation.tickets),telegramName:''});state.occupancy+=Number(operation.tickets);}
       states.push({hour:h,event:ce,state:state});
     }else throw Error('Неизвестная операция Диогена: '+operation.action);
   });
@@ -169,8 +176,19 @@ function syncDiogenCalendarBooking(event,start,end,operation){
       else{x.event.setTitle(title);x.event.setDescription(buildDiogenCalendarDescription(event,x.hour.start,x.state));}
     }
   });
-  synchronizeCalendar();
   journalLog('DIOGEN SYNC END','bookingId='+String(operation.bookingId)+' | action='+String(operation.action));
+}
+
+function buildDiogenStateFromBookings(bookings,event,h,excludeBookingId){
+  const entries=[],seen={};
+  (bookings||[]).forEach(function(b){
+    if(b.status!=='active'||String(b.id)===String(excludeBookingId)||!sameEvent(b,event))return;
+    const interval=getBookingInterval(b,event);
+    if(interval.start.getTime()>=h.end.getTime()||interval.end.getTime()<=h.start.getTime())return;
+    const id=String(b.id);if(seen[id])return;seen[id]=true;
+    entries.push({bookingId:id,telegramName:String(b.telegramName||''),tickets:Number(b.tickets)||0});
+  });
+  return{entries:entries,occupancy:calculateOccupancy(entries.map(function(e){return{tickets:e.tickets};})),capacity:getCapacity(event)};
 }
 
 function journalLog(kind,details){

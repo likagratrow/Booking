@@ -7,6 +7,24 @@
   <title>Странные Вещи — запись</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    .calendar-head-tools{position:absolute;right:0;top:50%;transform:translateY(-50%)}
+    .my-bookings-button{padding:6px 9px;color:var(--tg-text);background:var(--tg-secondary-bg);border:1px solid var(--tg-separator);border-radius:8px;font-size:11px;font-weight:700;cursor:pointer}
+    .my-bookings-button:active{transform:scale(.98)}
+    .my-bookings-modal{z-index:35}
+    .my-bookings-content{width:min(520px,100%);max-height:min(82vh,700px);overflow-y:auto}
+    .my-bookings-list{display:grid;gap:9px;margin-top:10px}
+    .my-booking{padding:11px 11px 10px;color:var(--tg-text);background:var(--tg-secondary-bg);border:2px solid var(--my-booking-color,var(--tg-accent));border-radius:10px}
+    .my-booking-main{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    .my-booking-copy{min-width:0}
+    .my-booking-activity{font-size:11px;color:var(--tg-hint);line-height:1.2}
+    .my-booking-name{margin-top:2px;font-size:15px;font-weight:700;line-height:1.2;overflow-wrap:anywhere}
+    .my-booking-meta{margin-top:6px;color:var(--tg-text);font-size:12px;line-height:1.35}
+    .my-booking-cancel{flex:0 0 auto;padding:7px 9px;color:var(--tg-text);background:var(--tg-bg);border:1px solid var(--my-booking-color,var(--tg-accent));border-radius:7px;font-size:11px;font-weight:700;cursor:pointer}
+    .my-booking-cancel:disabled{opacity:.55;cursor:default}
+    .my-bookings-empty,.my-bookings-error{padding:12px 2px;color:var(--tg-hint);font-size:13px;text-align:center}
+    @media(max-width:430px){.calendar-head-tools{right:-2px}.my-bookings-button{padding:5px 7px;font-size:10px}.section-head{padding-right:84px}}
+  </style>
 </head>
 <body>
   <main class="app">
@@ -14,7 +32,10 @@
       <div id="activities" class="choices"><div class="loading-activities">Загрузка...</div></div>
     </section>
     <section class="card calendar-card">
-      <div class="section-head"><div><h2 id="calendar-prompt" class="calendar-prompt">Выберите ↑</h2></div></div>
+      <div class="section-head">
+        <div><h2 id="calendar-prompt" class="calendar-prompt">Выберите ↑</h2></div>
+        <div class="calendar-head-tools"><button id="my-bookings-button" class="my-bookings-button" type="button">Мои брони</button></div>
+      </div>
       <div id="activity-legend" class="legend"></div>
       <div id="calendar" class="calendar"></div>
     </section>
@@ -34,6 +55,15 @@
 
   <div id="events-modal" class="modal events-modal hidden" role="dialog" aria-modal="true" aria-labelledby="events-title">
     <div class="events-modal-content"><button id="events-close" class="modal-close" type="button" aria-label="Закрыть">×</button><p class="eyebrow">ВЫБЕРИТЕ</p><h2 id="events-title"></h2><div id="events-list" class="events-list"></div></div>
+  </div>
+
+  <div id="my-bookings-modal" class="modal my-bookings-modal hidden" role="dialog" aria-modal="true" aria-labelledby="my-bookings-title">
+    <div class="modal-content my-bookings-content">
+      <button id="my-bookings-close" class="modal-close" type="button" aria-label="Закрыть">×</button>
+      <p class="eyebrow">МОИ ЗАПИСИ</p>
+      <h2 id="my-bookings-title">Мои брони</h2>
+      <div id="my-bookings-list" class="my-bookings-list"></div>
+    </div>
   </div>
 
   <div id="error-modal" class="modal error-modal hidden" role="dialog" aria-modal="true" aria-labelledby="error-title">
@@ -71,6 +101,93 @@
         slot.available=true;
         openBooking(slot,{diogen:diogen,endOptions:endOptions,context:context});
       };
+    })();
+  </script>
+  <script>
+    (function(){
+      const modal=document.getElementById('my-bookings-modal');
+      const list=document.getElementById('my-bookings-list');
+      const openButton=document.getElementById('my-bookings-button');
+      const closeButton=document.getElementById('my-bookings-close');
+
+      function currentTelegramUser(){return window.Telegram?.WebApp?.initDataUnsafe?.user||null;}
+      function bookingEndTime(booking){
+        const slot=String(booking?.slotId||'').split('::');
+        if(slot.length===4){const raw=slot[3],m=raw.match(/^\d{8}-(\d{2})(\d{2})$/);if(m)return m[1]+':'+m[2];}
+        const event=eventForContext({activity:booking.activity,name:booking.name});
+        const start=String(booking.time||'').match(/^(\d{1,2}):(\d{2})$/);
+        if(!event||!start)return'';
+        const minutes=Number(start[1])*60+Number(start[2])+parseDuration(event.duration);
+        return timeKey(minutes);
+      }
+      function bookingLabel(booking){
+        const start=String(booking.time||'').trim(),end=bookingEndTime(booking);
+        return end?`${formatBookingDate(booking.date)} · ${start}–${end}`:`${formatBookingDate(booking.date)} · ${start}`;
+      }
+      function activityInfo(booking){
+        const activity=activityByKey(booking.activity)||activities.find(function(a){return norm(a.title)===norm(booking.activity);});
+        return activity||{key:booking.activity,title:booking.activity,color:''};
+      }
+      function render(items){
+        if(!items.length){list.innerHTML='<div class="my-bookings-empty">Активных броней пока нет.</div>';return;}
+        items.sort(function(a,b){return String(a.date).localeCompare(String(b.date),'ru')||String(a.time).localeCompare(String(b.time),'ru');});
+        list.innerHTML=items.map(function(booking){
+          const activity=activityInfo(booking),color=String(activity.color||'').trim();
+          const style=color?` style="--my-booking-color:${esc(color)}"`:'';
+          return `<article class="my-booking" data-booking-id="${esc(booking.id)}"${style}>
+            <div class="my-booking-main">
+              <div class="my-booking-copy">
+                <div class="my-booking-activity">${esc(activity.title||booking.activity)}</div>
+                <div class="my-booking-name">${esc(booking.name)}</div>
+                <div class="my-booking-meta">${esc(bookingLabel(booking))} · ${esc(booking.tickets)} ${Number(booking.tickets)===1?'билет':'билета'}</div>
+              </div>
+              <button class="my-booking-cancel" type="button" data-cancel-booking="${esc(booking.id)}">Отменить</button>
+            </div>
+          </article>`;
+        }).join('');
+        list.querySelectorAll('[data-cancel-booking]').forEach(function(button){
+          button.addEventListener('click',function(){cancelBookingFromPopup(String(button.dataset.cancelBooking||''));});
+        });
+      }
+      async function loadMyBookings(){
+        const user=currentTelegramUser();
+        if(!user?.id){list.innerHTML='<div class="my-bookings-error">Не удалось определить пользователя Telegram.</div>';return;}
+        list.innerHTML='<div class="my-bookings-empty">Загружаем брони…</div>';
+        try{
+          const response=await fetch(BOOKING_API_URL,{cache:'no-store',redirect:'follow'});
+          if(!response.ok)throw Error('Сервер вернул HTTP '+response.status+'.');
+          const data=await response.json();
+          if(!data.ok)throw Error(data.error||'Не удалось загрузить брони.');
+          const items=(data.bookings?.items||[]).filter(function(b){return b.status==='active'&&String(b.telegramId)===String(user.id);});
+          render(items);
+        }catch(error){list.innerHTML=`<div class="my-bookings-error">${esc(error.message||'Не удалось загрузить брони.')}</div>`;}
+      }
+      async function cancelBookingFromPopup(id){
+        if(!id)return;
+        const user=currentTelegramUser();
+        if(!user?.id)return;
+        const button=list.querySelector(`[data-cancel-booking="${CSS.escape(id)}"]`);
+        if(button?.dataset.busy==='1')return;
+        if(!confirm('Отменить эту бронь?'))return;
+        if(button){button.dataset.busy='1';button.disabled=true;button.textContent='Отменяем…';}
+        try{
+          const response=await fetch(BOOKING_API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'cancel',bookingId:id,telegramId:String(user.id)}),redirect:'follow'});
+          const text=await response.text();
+          let data;try{data=JSON.parse(text);}catch(e){throw Error(`Сервер вернул не JSON: ${text.slice(0,180)}`);}
+          if(!data.ok)throw Error(data.error||'Не удалось отменить бронь.');
+          await loadBookingData();
+          await loadMyBookings();
+        }catch(error){
+          if(button){button.dataset.busy='';button.disabled=false;button.textContent='Отменить';}
+          showError(error.message||'Не удалось отменить бронь.');
+        }
+      }
+      function open(){modal.classList.remove('hidden');loadMyBookings();}
+      function close(){modal.classList.add('hidden');}
+      openButton?.addEventListener('click',open);
+      closeButton?.addEventListener('click',close);
+      modal?.addEventListener('click',function(event){if(event.target===modal)close();});
+      document.addEventListener('keydown',function(event){if(event.key==='Escape')close();});
     })();
   </script>
   <script>

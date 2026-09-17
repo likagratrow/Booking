@@ -41,5 +41,25 @@
   </div>
 
   <script src="app.js"></script>
+  <script>
+    (function runBackgroundCalendarNormalization(){
+      const url='https://script.google.com/macros/s/AKfycbwpYRqIunVa1uBfMqaf9HY4ICKXeeaCUbYLtoBxYT6e0_tYyBSvgiVfmeU-3SkEC2SqQ/exec';
+      const waitForCalendar=()=>{
+        if(document.body.classList.contains('app-loading')||!document.querySelector('#calendar .calendar-cell')){
+          setTimeout(waitForCalendar,100);
+          return;
+        }
+        fetch(url+'?action=normalize-free&ts='+Date.now(),{cache:'no-store',redirect:'follow'})
+          .then(async response=>{
+            if(!response.ok)throw Error('HTTP '+response.status);
+            const text=await response.text();
+            const result=JSON.parse(text);
+            if(!result.ok)throw Error(result.error||'Нормализация календаря не выполнена.');
+          })
+          .catch(error=>console.warn('Фоновая нормализация календаря не выполнена:',error));
+      };
+      setTimeout(waitForCalendar,0);
+    })();
+  </script>
 </body>
 </html>

@@ -28,7 +28,7 @@ jobs:
           cp 'Booking new.js' apps-script/Booking.gs
           cat > apps-script/.clasp.json <<'EOF'
           {
-            "scriptId": "1AOqjB79SeWbPHmpS6NH178z0Z6Ke3b1_BvrKSi3z1ni6NEnR7_USM1Ry"
+            "scriptId": "1A_Fz0Ltic115gyyWoD3UZRo8HzrvBqwwcAXgUBxbrpYJAXGHe9Q7uUzT"
           }
           EOF
           cat > apps-script/appsscript.json <<'EOF'
@@ -61,5 +61,5 @@ jobs:
         run: |
           set -euo pipefail
           npx @google/clasp@latest create-deployment \
-            --deploymentId "AKfycbxh_6CZxrOqGTLVnkAKrJ1zvaI27gq_5pZIq3MPS4j2dfRh3h3pQA_ospt1XKq-JX48HA" \
+            --deploymentId "AKfycbxRPZ-OLG_UOl_T093GSlC_aeJeEBa3ujx-OVWIyBvDSqmI0TuFMp4x0v_DBUmDBL6I" \
             --description "GitHub ${COMMIT_SHA:0:7}"

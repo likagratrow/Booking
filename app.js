@@ -33,8 +33,11 @@ let calendarLoading=false;
 const loadedCalendarDays=new Set();
 let calendarIndex=new Map();
 let firstCalendarRangeReadyResolve;
+let allCalendarRangesReadyResolve;
 const firstCalendarRangeReady=new Promise(resolve=>{firstCalendarRangeReadyResolve=resolve;});
+const allCalendarRangesReady=new Promise(resolve=>{allCalendarRangesReadyResolve=resolve;});
 window.bookingCalendarFirstRangeReady=firstCalendarRangeReady;
+window.bookingCalendarAllRangesReady=allCalendarRangesReady;
 
 const CALENDAR_START_HOUR=10;
 const CALENDAR_END_HOUR=20;
@@ -156,7 +159,7 @@ async function loadBookingData(){
     setCalendarLoading(false);
     firstCalendarRangeReadyResolve?.();
     fetchCalendarRange(CALENDAR_INITIAL_DAYS,CALENDAR_DAYS-CALENDAR_INITIAL_DAYS)
-      .then(()=>renderCalendar())
+      .then(()=>{renderCalendar();allCalendarRangesReadyResolve?.();})
       .catch(error=>console.warn('Не удалось догрузить вторую часть календаря:',error));
     return {ok:true};
   }catch(e){

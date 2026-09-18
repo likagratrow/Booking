@@ -1,0 +1,65 @@
+name: Deploy Booking Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Booking new.js'
+      - '.github/workflows/deploy-booking.yml'
+
+jobs:
+  deploy-booking:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Prepare Apps Script project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p apps-script
+          cp 'Booking new.js' apps-script/Booking.gs
+          cat > apps-script/.clasp.json <<'EOF'
+          {
+            "scriptId": "1AOqjB79SeWbPHmpS6NH178z0Z6Ke3b1_BvrKSi3z1ni6NEnR7_USM1Ry"
+          }
+          EOF
+          cat > apps-script/appsscript.json <<'EOF'
+          {
+            "timeZone": "Asia/Yekaterinburg",
+            "dependencies": {},
+            "exceptionLogging": "STACKDRIVER",
+            "runtimeVersion": "V8",
+            "webapp": {
+              "executeAs": "USER_DEPLOYING",
+              "access": "ANYONE_ANONYMOUS"
+            }
+          }
+          EOF
+
+      - name: Setup clasp credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+
+      - name: Push source to Apps Script
+        working-directory: apps-script
+        run: npx @google/clasp@latest push --force
+
+      - name: Update existing deployment
+        working-directory: apps-script
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          npx @google/clasp@latest create-deployment \
+            --deploymentId "AKfycbxh_6CZxrOqGTLVnkAKrJ1zvaI27gq_5pZIq3MPS4j2dfRh3h3pQA_ospt1XKq-JX48HA" \
+            --description "GitHub ${COMMIT_SHA:0:7}"

@@ -14,8 +14,30 @@ const LOOKAHEAD_DAYS=30;
 const BOOKING_MARKER='ST_BOOKING_SLOT:';
 const DIOGEN_ENTRY_MARKER='ST_BOOKING_ENTRY:';
 const DIOGEN_ACTIVITY_KEY='diogen';
+const CALENDAR_CACHE_TTL_SECONDS=20;
+const CALENDAR_CACHE_PREFIX='calendar-v2:';
 
-function doGet(e){try{if(String(e?.parameter?.action||'')==='normalize-free'){const lock=LockService.getScriptLock();lock.waitLock(30000);try{journalLog('NORMALIZE START','background free-slot normalization');synchronizeCalendar();journalLog('NORMALIZE END','background free-slot normalization');return jsonResponse({ok:true});}finally{lock.releaseLock();}}return jsonResponse(getBookingData());}catch(e){journalLog('GET ERROR','message='+String(e&&e.message||e));return jsonResponse({ok:false,error:e.message});}}
+function doGet(e){
+  try{
+    const action=String(e?.parameter?.action||'');
+    if(action==='normalize-free'){
+      const lock=LockService.getScriptLock();lock.waitLock(30000);
+      try{
+        journalLog('NORMALIZE START','background free-slot normalization');
+        synchronizeCalendar();
+        clearCalendarCache();
+        journalLog('NORMALIZE END','background free-slot normalization');
+        return jsonResponse({ok:true});
+      }finally{lock.releaseLock();}
+    }
+    if(action==='calendar')return jsonResponse(getCalendarRangeData(e?.parameter||{}));
+    if(action==='bookings')return jsonResponse(getBookingsData());
+    return jsonResponse(getBookingData());
+  }catch(e){
+    journalLog('GET ERROR','message='+String(e&&e.message||e));
+    return jsonResponse({ok:false,error:e.message});
+  }
+}
 function doPost(e){try{journalLog('POST RECEIVED','hasPostData='+Boolean(e&&e.postData&&e.postData.contents));if(!e?.postData?.contents)throw Error('Не получены данные POST-запроса.');const data=JSON.parse(e.postData.contents);journalLog('POST PARSED','action='+String(data.action||'')+' | activity='+String(data.activity||'')+' | eventName='+String(data.eventName||''));if(data.action==='book')return jsonResponse(createBooking(data));if(data.action==='cancel')return jsonResponse(cancelBooking(data));throw Error('Неизвестное действие: '+data.action);}catch(e){journalLog('POST ERROR','message='+String(e&&e.message||e));return jsonResponse({ok:false,error:e.message});}}
 function jsonResponse(data){return ContentService.createTextOutput(JSON.stringify(data,null,2)).setMimeType(ContentService.MimeType.JSON);}
 
@@ -24,6 +46,36 @@ function getBookingData(){
   if(!es)throw Error('Лист "'+EVENTS_SHEET_NAME+'" не найден.');if(!bs)throw Error('Лист "'+BOOKING_SHEET_NAME+'" не найден.');
   const events=readEvents(es),bookings=readBookings(bs),calendar=readCalendar();
   return {ok:true,settings:{slotStepMinutes:SLOT_STEP_MINUTES,lookaheadDays:LOOKAHEAD_DAYS},events:events,bookings:{count:bookings.length,items:bookings},calendar:{name:BOOKING_CALENDAR_NAME,events:calendar.events,freeWindows:calendar.freeWindows,blocks:calendar.blocks}};
+}
+
+function getBookingsData(){
+  const ss=SpreadsheetApp.getActiveSpreadsheet(),bs=ss.getSheetByName(BOOKING_SHEET_NAME);
+  if(!bs)throw Error('Лист "'+BOOKING_SHEET_NAME+'" не найден.');
+  const bookings=readBookings(bs);
+  return {ok:true,bookings:{count:bookings.length,items:bookings}};
+}
+
+function getCalendarRangeData(params){
+  const offset=Math.max(0,Math.min(LOOKAHEAD_DAYS-1,Number(params.offsetDays)||0));
+  const days=Math.max(1,Math.min(LOOKAHEAD_DAYS-offset,Number(params.days)||7));
+  const key=calendarCacheKey(offset,days),cache=CacheService.getScriptCache();
+  const cached=cache.get(key);
+  if(cached){try{return JSON.parse(cached);}catch(e){cache.remove(key);}}
+  const calendar=readCalendarRange(offset,days);
+  const result={ok:true,settings:{slotStepMinutes:SLOT_STEP_MINUTES,lookaheadDays:LOOKAHEAD_DAYS},range:{offsetDays:offset,days:days},calendar:{name:BOOKING_CALENDAR_NAME,events:calendar.events}};
+  try{cache.put(key,JSON.stringify(result),CALENDAR_CACHE_TTL_SECONDS);}catch(e){Logger.log('Calendar cache write skipped: '+e.message);}
+  return result;
+}
+
+function calendarCacheKey(offset,days){
+  const today=Utilities.formatDate(startOfDay(new Date()),Session.getScriptTimeZone(),'yyyyMMdd');
+  return CALENDAR_CACHE_PREFIX+today+':'+offset+':'+days;
+}
+
+function clearCalendarCache(){
+  const cache=CacheService.getScriptCache();
+  cache.remove(calendarCacheKey(0,7));
+  cache.remove(calendarCacheKey(7,LOOKAHEAD_DAYS-7));
 }
 
 function createBooking(data){
@@ -59,6 +111,7 @@ function createBooking(data){
     bs.appendRow([id,telegramId,telegramName,String(event.activity).trim(),String(event.name).trim(),date,time,tickets,'active',slotId]);
     const row=bs.getLastRow(),updated=readBookings(bs);
     try{syncCalendarBooking(event,start,end,updated,{action:'book',bookingId:id,tickets:tickets,telegramName:telegramName,activityKey:activity});}catch(e){try{bs.deleteRow(row);}catch(x){Logger.log(x.message);}throw e;}
+    clearCalendarCache();
     const finalBookings=readBookings(bs),slotBookings=getBookingsForExactSlot(finalBookings,start,event),occupied=calculateOccupancy(slotBookings);
     return {ok:true,booking:{id:id,telegramId:telegramId,telegramName:telegramName,activity:event.activity,name:event.name,date:date,time:time,endTime:formatTime(end),tickets:tickets,status:'active',slotId:slotId},slot:{slotId:slotId,start:formatDateTime(start),end:formatDateTime(end),capacity:capacity,occupied:occupied,free:Math.max(0,capacity-occupied)}};
   }finally{lock.releaseLock();}
@@ -77,6 +130,7 @@ function cancelBooking(data){
     const interval=getBookingInterval(booking,event);bs.getRange(rowNumber,map.status+1).setValue('cancel');
     const bookings=readBookings(bs);
     try{syncCalendarBooking(event,interval.start,interval.end,bookings,{action:'cancel',bookingId:booking.id,tickets:booking.tickets,activityKey:booking.activity});}catch(e){bs.getRange(rowNumber,map.status+1).setValue('active');throw e;}
+    clearCalendarCache();
     return {ok:true,booking:{id:id,status:'cancel'}};
   }finally{lock.releaseLock();}
 }
@@ -107,7 +161,22 @@ function getBookingsForExactSlot(bookings,start,event){const end=addMinutes(star
 function getAllBookingsAtStart(bookings,start){return bookings.filter(function(b){return b.status==='active'&&b.date===formatDate(start)&&b.time===formatTime(start);});}
 function calculateOccupancy(bs){return bs.reduce(function(n,b){return n+(Number(b.tickets)||0);},0);}
 
-function readCalendar(){const c=getBookingCalendar(),now=new Date(),from=startOfDay(now),to=new Date(from);to.setDate(to.getDate()+LOOKAHEAD_DAYS+1);const all=c.getEvents(from,to),events=[],freeWindows=[],blocks=[];all.forEach(function(e){const title=String(e.getTitle()||'').trim(),item={id:e.getId(),title:title,start:e.getStartTime().toISOString(),end:e.getEndTime().toISOString(),description:String(e.getDescription()||''),isBooking:isBookingCalendarEvent(e)};events.push(item);if(title===FREE_EVENT_TITLE)freeWindows.push({id:item.id,start:item.start,end:item.end});else if(!item.isBooking)blocks.push({id:item.id,title:title,start:item.start,end:item.end});});return{events:events,freeWindows:freeWindows,blocks:blocks};}
+function readCalendar(){return readCalendarRange(0,LOOKAHEAD_DAYS);}
+function readCalendarRange(offsetDays,days){
+  const c=getBookingCalendar(),from=startOfDay(new Date());
+  from.setDate(from.getDate()+Number(offsetDays||0));
+  const to=new Date(from);to.setDate(to.getDate()+Number(days||0));
+  const all=c.getEvents(from,to),events=[],freeWindows=[],blocks=[];
+  all.forEach(function(e){
+    const title=String(e.getTitle()||'').trim(),booking=isBookingCalendarEvent(e),start=e.getStartTime().toISOString(),end=e.getEndTime().toISOString();
+    const item={id:e.getId(),title:title,start:start,end:end,isBooking:booking};
+    if(booking)item.description=String(e.getDescription()||'');
+    events.push(item);
+    if(title===FREE_EVENT_TITLE)freeWindows.push({id:item.id,start:start,end:end});
+    else if(!booking)blocks.push({id:item.id,title:title,start:start,end:end});
+  });
+  return{events:events,freeWindows:freeWindows,blocks:blocks};
+}
 function getCalendarBookingOccupancy(items,start,end,event){const matches=(items||[]).filter(function(i){if(!i||!i.isBooking)return false;const s=new Date(i.start),e=new Date(i.end);if(s>=end||e<=start)return false;const parsed=parseCalendarSlotId(i.description),title=String(i.title||'').trim(),expected=String(event.activity).trim()+' — '+String(event.name).trim();return(Boolean(parsed&&calendarSlotMatchesEvent(parsed,event))||title===expected);});if(!matches.length)return{exists:false,occupied:0,capacity:getCapacity(event)};let occupied=0,capacity=getCapacity(event);matches.forEach(function(i){const m=String(i.description).match(/(\d+)\s*\/\s*(\d+)\s*$/m);if(m){occupied=Math.max(occupied,Number(m[1]));capacity=Number(m[2])||capacity;}});return{exists:true,occupied:occupied,capacity:capacity};}
 function parseCalendarSlotId(description){const marker=String(description||'').split('\n')[0];if(marker.indexOf(BOOKING_MARKER)!==0)return null;const id=marker.slice(BOOKING_MARKER.length),m=id.match(/^(.*)_(\d{8}-\d{4})$/);if(!m)return null;return{slotId:id,prefix:m[1],start:m[2]};}
 function calendarSlotMatchesEvent(parsed,event){const prefix=String(event.activity).trim()+'_'+String(event.name).trim()+'_';return String(parsed.prefix).indexOf(prefix)===0;}

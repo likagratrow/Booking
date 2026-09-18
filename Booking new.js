@@ -1,3 +1,4 @@
+// GitHub deployment smoke test — intentionally no-op.
 /**
  * Strange Things Booking — Google Apps Script
  * Business data comes from "Ивенты"; "Брони" is the booking journal;

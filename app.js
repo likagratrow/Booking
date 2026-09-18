@@ -22,9 +22,6 @@ const eventsList=document.getElementById('events-list');
 const eventsClose=document.getElementById('events-close');
 const calendarPrompt=document.getElementById('calendar-prompt');
 const activityLegend=document.getElementById('activity-legend');
-const globalLoader=document.getElementById('global-loader');
-const globalLoaderText=document.getElementById('global-loader-text');
-
 let activities=[];
 let events=[];
 let calendarEvents=[];
@@ -33,12 +30,16 @@ let calendarGeometry=null;
 let bookingModal=null;
 let calendarConfig={events:[],freeWindows:[],blocks:[]};
 let calendarLoading=false;
-let loaderTextTimer=null;
-let loaderHideTimer=null;
+const loadedCalendarDays=new Set();
+let calendarIndex=new Map();
+let firstCalendarRangeReadyResolve;
+const firstCalendarRangeReady=new Promise(resolve=>{firstCalendarRangeReadyResolve=resolve;});
+window.bookingCalendarFirstRangeReady=firstCalendarRangeReady;
 
 const CALENDAR_START_HOUR=10;
 const CALENDAR_END_HOUR=20;
 const CALENDAR_DAYS=30;
+const CALENDAR_INITIAL_DAYS=7;
 
 const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;');
 function parse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<=a)throw Error('Google Таблица не вернула данные.');return JSON.parse(t.slice(a,b+1));}
@@ -69,7 +70,33 @@ function eventColor(event){const name=bookingEventName(event);const eventData=ev
 function activityStyle(color){return color?` style="background:${esc(color)}"`:'';}
 function eventStyle(color){return color?` style="--activity-color:${esc(color)};background:color-mix(in srgb,${esc(color)} 20%,var(--tg-bg));border:2px solid ${esc(color)}"`:'';}
 function eventHasStarted(event){const p=slotDateTime(event?.start);if(!p.date||!Number.isFinite(p.minutes))return false;const [d,m,y]=p.date.split('.').map(Number);const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Yekaterinburg',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());const v={};parts.forEach(x=>{if(x.type!=='literal')v[x.type]=x.value;});const nowKey=Date.UTC(Number(v.year),Number(v.month)-1,Number(v.day),Number(v.hour),Number(v.minute));const eventKey=Date.UTC(y,m-1,d,Math.floor(p.minutes/60),p.minutes%60);return eventKey<=nowKey;}
-function calendarEventsForCell(date,hour){const start=hour*60,end=start+60;return calendarEvents.filter(event=>eventDate(event)===date&&Number.isFinite(eventStartMinutes(event))&&Number.isFinite(eventEndMinutes(event))&&eventStartMinutes(event)<end&&eventEndMinutes(event)>start);}
+function rebuildCalendarIndex(){
+  const index=new Map();
+  (calendarEvents||[]).forEach(function(event){
+    const p=slotDateTime(event?.start),q=slotDateTime(event?.end);
+    if(!p.date||!q.date||!Number.isFinite(p.minutes)||!Number.isFinite(q.minutes))return;
+    const endMinutes=q.minutes<=p.minutes?q.minutes+24*60:q.minutes;
+    let dayDate=p.date,dayOffset=0;
+    while(dayOffset<=7){
+      const startWindow=dayOffset===0?p.minutes:0;
+      const endWindow=dayDate===q.date?endMinutes:24*60;
+      for(let m=Math.floor(startWindow/60)*60;m<endWindow;m+=60){
+        const hour=Math.floor((m%1440)/60),key=dayDate+'|'+hour;
+        if(hour<0||hour>23)continue;
+        const bucket=index.get(key)||[];bucket.push(event);index.set(key,bucket);
+      }
+      if(dayDate===q.date)break;
+      const parts=dayDate.split('.').map(Number),d=new Date(parts[2],parts[1]-1,parts[0],12,0,0,0);d.setDate(d.getDate()+1);dayDate=dateString(d);dayOffset++;
+    }
+  });
+  calendarIndex=index;
+}
+function isCalendarDayLoaded(date){return loadedCalendarDays.has(date);}
+function markCalendarDaysLoaded(offsetDays,days){
+  const geometry=ensureCalendarGeometry();
+  for(let i=Number(offsetDays)||0;i<(Number(offsetDays)||0)+Number(days||0);i++){const day=geometry.days[i];if(day)loadedCalendarDays.add(dateString(day));}
+}
+function calendarEventsForCell(date,hour){return calendarIndex.get(date+'|'+hour)||[];}
 function freeEventsForCell(date,hour){return calendarEventsForCell(date,hour).filter(event=>norm(event.title)==='свободно');}
 function bookingEventsForCell(date,hour){return calendarEventsForCell(date,hour).filter(event=>event.isBooking);}
 function blockEventsForCell(date,hour){return calendarEventsForCell(date,hour).filter(event=>norm(event.title)!=='свободно'&&!event.isBooking);}
@@ -89,12 +116,56 @@ function cellState(date,hour){const actual=calendarEventsForCell(date,hour);if(!
 function buildCalendarGeometry(){const first=new Date();first.setHours(12,0,0,0);const days=Array.from({length:CALENDAR_DAYS},(_,i)=>addDays(first,i));const hours=Array.from({length:CALENDAR_END_HOUR-CALENDAR_START_HOUR},(_,i)=>CALENDAR_START_HOUR+i);calendarGeometry={days,hours};return calendarGeometry;}
 function ensureCalendarGeometry(){return calendarGeometry||buildCalendarGeometry();}
 function renderCalendarSkeleton(){const geometry=ensureCalendarGeometry();const dayHeads=geometry.days.map(d=>`<div class="calendar-day-head">${esc(dateText(d))}</div>`).join('');const columns=geometry.days.map(()=>{const cells=geometry.hours.map(hour=>`<div class="calendar-cell calendar-loading-cell"><span class="calendar-cell-time">${timeKey(hour*60)}–${timeKey(hour*60+60)}</span></div>`).join('');return`<div class="calendar-column">${cells}</div>`;}).join('');calendar.innerHTML=`<div class="calendar-scroll"><div class="calendar-grid"><div class="calendar-corner"></div><div class="calendar-days">${dayHeads}</div><div class="calendar-times"></div><div class="calendar-columns">${columns}</div></div></div>`;}
-const loaderPhrases=['гномики проверяют календарь, подождите пожалуйста','сверяемся с календарём','гномики считают свободные места','ищем свободное окошко','календарный отдел уже работает'];
-function setCalendarLoading(value){calendarLoading=Boolean(value);calendar.classList.toggle('calendar-loading',calendarLoading);document.body.classList.toggle('app-loading',calendarLoading);if(!globalLoader)return;if(calendarLoading){globalLoader.classList.remove('hidden');globalLoaderText.classList.remove('visible');clearTimeout(loaderTextTimer);clearTimeout(loaderHideTimer);loaderTextTimer=setTimeout(()=>{if(!calendarLoading)return;globalLoaderText.textContent=loaderPhrases[Math.floor(Math.random()*loaderPhrases.length)];globalLoaderText.classList.add('visible');loaderHideTimer=setTimeout(()=>globalLoaderText.classList.remove('visible'),6000);},450);}else{clearTimeout(loaderTextTimer);clearTimeout(loaderHideTimer);globalLoaderText.classList.remove('visible');globalLoader.classList.add('hidden');}}
+function setCalendarLoading(value){calendarLoading=Boolean(value);calendar.classList.toggle('calendar-loading',calendarLoading);}
 
 async function loadActivities(){activitiesContainer.innerHTML='<div class="loading-activities">Загрузка...</div>';try{const r=await fetch(SHEET_URL,{cache:'no-store'});if(!r.ok)throw Error(`Ошибка Google Таблицы: ${r.status}`);const j=parse(await r.text());activities=(j.table.rows||[]).map((x,i)=>{const c=x.c||[];return{key:String(cell(c,0,'')).trim(),title:String(cell(c,1,'')).trim(),description:String(cell(c,2,'')).trim(),image:String(cell(c,3,'')).trim(),color:String(cell(c,5,'')).trim(),index:i};}).filter(x=>x.key&&x.title);renderActivities();renderActivityLegend();}catch(e){activitiesContainer.innerHTML=`<div class="load-error">Не удалось загрузить активности: ${esc(e.message)}</div>`;}}
-async function loadEvents(){try{const r=await fetch(EVENTS_SHEET_URL,{cache:'no-store'});if(!r.ok)throw Error(`Ошибка Google Таблицы: ${r.status}`);const j=parse(await r.text());events=(j.table.rows||[]).map((x,i)=>{const c=x.c||[];return{activity:String(cell(c,0,'')).trim(),name:String(cell(c,1,'')).trim(),price:String(cell(c,2,'')).trim(),age:String(cell(c,3,'')).trim(),duration:String(cell(c,4,'')).trim(),complexity:String(cell(c,5,'')).trim(),image:String(cell(c,6,'')).trim(),description:String(cell(c,8,'')).trim(),amount:optionalNumber(cell(c,9,'')),min:optionalNumber(cell(c,10,'')),index:i};}).filter(x=>x.activity&&x.name);}catch(e){console.error('Ошибка загрузки ивентов:',e);events=[];}renderActivities();renderActivityLegend();}
-async function loadBookingData(){setCalendarLoading(true);let lastError=null;try{for(let attempt=0;attempt<3;attempt++){try{const r=await fetch(BOOKING_API_URL,{cache:'no-store',redirect:'follow'});if(!r.ok)throw Error(`Ошибка сервера: ${r.status} ${r.statusText}`);const text=await r.text();let j;try{j=JSON.parse(text);}catch(e){throw Error(`Сервер вернул не JSON: ${text.slice(0,200)}`);}if(!j.ok)throw Error(j.error||'Не удалось получить календарь.');calendarConfig=j.calendar||{events:[],freeWindows:[],blocks:[]};calendarEvents=Array.isArray(calendarConfig.events)?calendarConfig.events:[];renderCalendar();return j;}catch(e){lastError=e;if(attempt<2)await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));}}throw lastError||Error('Не удалось получить календарь.');}catch(e){console.error('Ошибка загрузки календаря:',e);calendarEvents=[];calendarConfig={events:[],freeWindows:[],blocks:[]};renderCalendar();showError(e.message||'Не удалось загрузить календарь.');throw e;}finally{setCalendarLoading(false);}}
+async function loadEvents(){try{const r=await fetch(EVENTS_SHEET_URL,{cache:'no-store'});if(!r.ok)throw Error(`Ошибка Google Таблицы: ${r.status}`);const j=parse(await r.text());events=(j.table.rows||[]).map((x,i)=>{const c=x.c||[];return{activity:String(cell(c,0,'')).trim(),name:String(cell(c,1,'')).trim(),price:String(cell(c,2,'')).trim(),age:String(cell(c,3,'')).trim(),duration:String(cell(c,4,'')).trim(),complexity:String(cell(c,5,'')).trim(),image:String(cell(c,6,'')).trim(),description:String(cell(c,8,'')).trim(),amount:optionalNumber(cell(c,9,'')),min:optionalNumber(cell(c,10,'')),index:i};}).filter(x=>x.activity&&x.name);}catch(e){console.error('Ошибка загрузки ивентов:',e);events=[];}renderActivities();renderActivityLegend();if(calendarEvents.length)renderCalendar();}
+async function fetchCalendarRange(offsetDays,days){
+  let lastError=null;
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      const url=`${BOOKING_API_URL}?action=calendar&offsetDays=${encodeURIComponent(offsetDays)}&days=${encodeURIComponent(days)}&ts=${Date.now()}`;
+      const r=await fetch(url,{cache:'no-store',redirect:'follow'});
+      if(!r.ok)throw Error(`Ошибка сервера: ${r.status} ${r.statusText}`);
+      const text=await r.text();let j;
+      try{j=JSON.parse(text);}catch(e){throw Error(`Сервер вернул не JSON: ${text.slice(0,200)}`);}
+      if(!j.ok)throw Error(j.error||'Не удалось получить календарь.');
+      const incoming=Array.isArray(j.calendar?.events)?j.calendar.events:[];
+      const byId=new Map((calendarEvents||[]).map(event=>[String(event.id),event]));
+      incoming.forEach(event=>byId.set(String(event.id),event));
+      calendarEvents=[...byId.values()];
+      calendarConfig={name:j.calendar?.name||'',events:calendarEvents,freeWindows:[],blocks:[]};
+      rebuildCalendarIndex();
+      markCalendarDaysLoaded(Number(offsetDays)||0,Number(days)||0);
+      return j;
+    }catch(e){
+      lastError=e;
+      if(attempt<2)await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));
+    }
+  }
+  throw lastError||Error('Не удалось получить календарь.');
+}
+
+async function loadBookingData(){
+  setCalendarLoading(true);
+  loadedCalendarDays.clear();calendarEvents=[];calendarConfig={events:[],freeWindows:[],blocks:[]};calendarIndex=new Map();
+  renderCalendar();
+  try{
+    await fetchCalendarRange(0,CALENDAR_INITIAL_DAYS);
+    renderCalendar();
+    setCalendarLoading(false);
+    firstCalendarRangeReadyResolve?.();
+    fetchCalendarRange(CALENDAR_INITIAL_DAYS,CALENDAR_DAYS-CALENDAR_INITIAL_DAYS)
+      .then(()=>renderCalendar())
+      .catch(error=>console.warn('Не удалось догрузить вторую часть календаря:',error));
+    return {ok:true};
+  }catch(e){
+    console.error('Ошибка загрузки календаря:',e);
+    setCalendarLoading(false);
+    loadedCalendarDays.clear();calendarEvents=[];calendarConfig={events:[],freeWindows:[],blocks:[]};calendarIndex=new Map();
+    renderCalendar();showError(e.message||'Не удалось загрузить календарь.');throw e;
+  }
+}
 
 function renderActivities(){if(!activities.length){activitiesContainer.innerHTML='<div class="load-error">Не удалось найти активности.</div>';return;}const icons=['◌','✦','✎','◆','●','◇'];const rows=[];for(let i=0;i<activities.length;i+=3)rows.push(activities.slice(i,i+3));activitiesContainer.innerHTML=rows.map(row=>`<div class="choice-row" style="grid-template-columns:repeat(${row.length},minmax(0,1fr))">${row.map(a=>{return`<article class="choice" data-action="${esc(a.key)}"><span class="choice-icon"${activityStyle(a.color)}>${icons[activities.indexOf(a)%icons.length]}</span><strong class="choice-title">${esc(a.title)}</strong><button class="choice-book" type="button" data-book="${esc(a.key)}">Записаться</button></article>`;}).join('')}</div>`).join('');activitiesContainer.querySelectorAll('.choice').forEach(card=>card.addEventListener('click',e=>{const key=card.dataset.action;if(e.target.closest('.choice-book')){e.stopPropagation();openEventChooser(key);return;}openActivity(key);}));}
 function renderActivityLegend(){if(!activityLegend)return;const base='<span><i class="dot free"></i> свободно</span>';const activityItems=activities.map(a=>`<span><i class="dot"${activityStyle(a.color)}></i> ${esc(a.title)}</span>`).join('');activityLegend.innerHTML=base+activityItems;}
@@ -104,12 +175,16 @@ function stars(v){const n=Math.max(0,Math.min(5,parseInt(v,10)||0));return[1,2,3
 function openEventChooser(key){key=String(key||'').trim();const activity=activityByKey(key);if(!activity)return;const list=events.filter(x=>norm(x.activity)===norm(key));if(list.length===1){closeEvents();goToCalendar(key,list[0].name,true);return;}if(!list.length){closeEvents();goToCalendar(key,'',false);return;}eventsTitle.textContent=activity.title;eventsList.innerHTML=list.map((event,i)=>`<article class="event-card"><div class="event-image-wrap ${event.image?'':'empty'}">${event.image?`<img class="event-image" src="${esc(event.image)}" alt="${esc(event.name)}">`:'Фото пока нет'}<div class="event-overlay"><div class="event-text-block"><h3>${esc(event.name)}</h3><strong class="event-price">${esc(event.price||'—')} р</strong></div><div class="event-age"><strong>${esc(event.age||'—')}</strong></div><div class="event-duration"><strong>${esc(event.duration||'—')}</strong></div><div class="event-complexity"><strong class="complexity-stars">${stars(event.complexity)}</strong></div></div><div class="event-actions"><button class="event-details" type="button" data-i="${i}">Подробнее</button><button class="event-book" type="button" data-i="${i}">Записаться</button></div></div><div class="event-description hidden" data-i="${i}">${esc(event.description||'Описание пока придумываем')}</div></article>`).join('');eventsList.querySelectorAll('.event-details').forEach(button=>button.addEventListener('click',()=>{const description=eventsList.querySelector(`.event-description[data-i="${button.dataset.i}"]`);if(!description)return;const open=!description.classList.contains('hidden');description.classList.toggle('hidden');button.textContent=open?'Подробнее':'Свернуть';}));eventsList.querySelectorAll('.event-book').forEach(button=>button.addEventListener('click',()=>{const event=list[Number(button.dataset.i)];closeEvents();goToCalendar(key,event?.name||'',true);}));eventsModal.classList.remove('hidden');}
 function closeEvents(){eventsModal.classList.add('hidden');}
 
-function renderCell(date,hour){const start=hour*60;const state=cellState(date,hour);const valid=selectedStartValid(date,start);if(state.kind==='closed')return`<div class="calendar-cell calendar-closed"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span></div>`;if(state.kind==='free')return`<button type="button" class="calendar-cell calendar-free ${valid?'selected-start':''}" data-date="${esc(date)}" data-hour="${hour}"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span></button>`;const primary=state.display||state.events[0];const occupancy=primary?.isBooking?bookingEventOccupancy(primary):null;const full=Boolean(occupancy&&occupancy.capacity>0&&occupancy.occupied>=occupancy.capacity);const color=eventColor(primary);const label=bookingEventName(primary)||'занято';const joinable=bookingEventJoinable(primary);const clickable=valid||joinable;const occupancyHtml=occupancy?`<small>${occupancy.occupied<occupancy.capacity?'<i class="occupancy-dot" aria-hidden="true"></i>':''}${occupancy.occupied}/${occupancy.capacity}</small>`:'';const style=eventStyle(color);return clickable?`<button type="button" class="calendar-cell calendar-booked ${full?'fully-booked':''} ${joinable?'calendar-joinable':''} ${valid?'selected-start':''}"${style} data-date="${esc(date)}" data-hour="${hour}"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span><strong>${esc(label)}</strong>${occupancyHtml}</button>`:`<div class="calendar-cell calendar-booked ${full?'fully-booked':''}"${style}><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span><strong>${esc(label)}</strong>${occupancyHtml}</div>`;}
+function renderCell(date,hour){
+  const start=hour*60;
+  if(!isCalendarDayLoaded(date))return`<div class="calendar-cell calendar-loading-cell"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span></div>`;
+  const state=cellState(date,hour);const valid=selectedStartValid(date,start);if(state.kind==='closed')return`<div class="calendar-cell calendar-closed"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span></div>`;if(state.kind==='free')return`<button type="button" class="calendar-cell calendar-free ${valid?'selected-start':''}" data-date="${esc(date)}" data-hour="${hour}"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span></button>`;const primary=state.display||state.events[0];const occupancy=primary?.isBooking?bookingEventOccupancy(primary):null;const full=Boolean(occupancy&&occupancy.capacity>0&&occupancy.occupied>=occupancy.capacity);const color=eventColor(primary);const label=bookingEventName(primary)||'занято';const joinable=bookingEventJoinable(primary);const clickable=valid||joinable;const occupancyHtml=occupancy?`<small>${occupancy.occupied<occupancy.capacity?'<i class="occupancy-dot" aria-hidden="true"></i>':''}${occupancy.occupied}/${occupancy.capacity}</small>`:'';const style=eventStyle(color);return clickable?`<button type="button" class="calendar-cell calendar-booked ${full?'fully-booked':''} ${joinable?'calendar-joinable':''} ${valid?'selected-start':''}"${style} data-date="${esc(date)}" data-hour="${hour}"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span><strong>${esc(label)}</strong>${occupancyHtml}</button>`:`<div class="calendar-cell calendar-booked ${full?'fully-booked':''}"${style}><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span><strong>${esc(label)}</strong>${occupancyHtml}</div>`;
+}
 function renderCalendar(){const geometry=ensureCalendarGeometry();const dayHeads=geometry.days.map(d=>`<div class="calendar-day-head">${esc(dateText(d))}</div>`).join('');const columns=geometry.days.map(d=>{const date=dateString(d);const cells=geometry.hours.map(hour=>renderCell(date,hour)).join('');return`<div class="calendar-column">${cells}</div>`;}).join('');calendar.innerHTML=`<div class="calendar-scroll"><div class="calendar-grid"><div class="calendar-corner"></div><div class="calendar-days">${dayHeads}</div><div class="calendar-times"></div><div class="calendar-columns">${columns}</div></div></div>`;calendar.classList.toggle('calendar-loading',calendarLoading);updateCalendarPrompt();calendar.querySelectorAll('.calendar-free').forEach(el=>el.addEventListener('click',()=>handleFreeCell(el.dataset.date,Number(el.dataset.hour))));calendar.querySelectorAll('.calendar-joinable').forEach(el=>el.addEventListener('click',()=>handleJoinableCell(el.dataset.date,Number(el.dataset.hour))));}
 function promptActivityChoice(){const cards=[...activitiesContainer.querySelectorAll('.choice')];cards.forEach(x=>x.classList.remove('choice-highlight'));let count=0;const flash=()=>{cards.forEach(x=>x.classList.toggle('choice-highlight'));count++;if(count<4)setTimeout(flash,count===1?120:180);else cards.forEach(x=>x.classList.remove('choice-highlight'));};flash();activitiesContainer.scrollIntoView({behavior:'smooth',block:'center'});}
 async function handleFreeCell(date,hour){const start=hour*60;if(!selectedCalendar.activity){promptActivityChoice();return;}if(!selectedStartValid(date,start)){showError('выберите пожалуйста слот повыше, а то мы закончим очень поздно)');return;}openNewBooking(date,start);}
 function handleJoinableCell(date,hour){const event=bookingEventsForCell(date,hour).find(bookingEventJoinable);if(!event)return;openExistingBooking(event,date,hour);}
-async function goToCalendar(key,name='',showLoader=true){selectedCalendar={activity:String(key||'').trim(),name:String(name||'').trim()};updateCalendarPrompt();if(showLoader){setCalendarLoading(true);await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));}renderCalendar();if(showLoader)setCalendarLoading(false);document.querySelector('.calendar-card')?.scrollIntoView({behavior:'smooth',block:'start'});}
+async function goToCalendar(key,name='',showLoader=false){selectedCalendar={activity:String(key||'').trim(),name:String(name||'').trim()};updateCalendarPrompt();renderCalendar();document.querySelector('.calendar-card')?.scrollIntoView({behavior:'smooth',block:'start'});}
 function showError(text){const modal=document.getElementById('error-modal');const body=document.getElementById('error-text');if(!modal||!body){console.error(text);return;}body.textContent=text;modal.classList.remove('hidden');}
 function closeError(){document.getElementById('error-modal')?.classList.add('hidden');}
 

@@ -33,16 +33,17 @@ let calendarLoading=false;
 const loadedCalendarDays=new Set();
 let calendarIndex=new Map();
 let firstCalendarRangeReadyResolve;
-let allCalendarRangesReadyResolve;
 const firstCalendarRangeReady=new Promise(resolve=>{firstCalendarRangeReadyResolve=resolve;});
-const allCalendarRangesReady=new Promise(resolve=>{allCalendarRangesReadyResolve=resolve;});
 window.bookingCalendarFirstRangeReady=firstCalendarRangeReady;
-window.bookingCalendarAllRangesReady=allCalendarRangesReady;
+let calendarLoadedThrough=0;
+let calendarRangeLoading=false;
+let calendarScrollTimer=null;
 
 const CALENDAR_START_HOUR=10;
 const CALENDAR_END_HOUR=20;
 const CALENDAR_DAYS=30;
 const CALENDAR_INITIAL_DAYS=7;
+const CALENDAR_CHUNK_DAYS=7;
 
 const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;');
 function parse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<=a)throw Error('Google Таблица не вернула данные.');return JSON.parse(t.slice(a,b+1));}
@@ -139,7 +140,9 @@ async function fetchCalendarRange(offsetDays,days){
       calendarEvents=[...byId.values()];
       calendarConfig={name:j.calendar?.name||'',events:calendarEvents,freeWindows:[],blocks:[]};
       rebuildCalendarIndex();
-      markCalendarDaysLoaded(Number(offsetDays)||0,Number(days)||0);
+      const offset=Number(offsetDays)||0,loaded=Number(days)||0;
+      markCalendarDaysLoaded(offset,loaded);
+      calendarLoadedThrough=Math.max(calendarLoadedThrough,Math.min(CALENDAR_DAYS,offset+loaded));
       return j;
     }catch(e){
       lastError=e;
@@ -151,24 +154,57 @@ async function fetchCalendarRange(offsetDays,days){
 
 async function loadBookingData(){
   setCalendarLoading(true);
-  loadedCalendarDays.clear();calendarEvents=[];calendarConfig={events:[],freeWindows:[],blocks:[]};calendarIndex=new Map();
+  loadedCalendarDays.clear();calendarEvents=[];calendarConfig={events:[],freeWindows:[],blocks:[]};calendarIndex=new Map();calendarLoadedThrough=0;calendarRangeLoading=false;
   renderCalendar();
   try{
     await fetchCalendarRange(0,CALENDAR_INITIAL_DAYS);
     renderCalendar();
     setCalendarLoading(false);
     firstCalendarRangeReadyResolve?.();
-    fetchCalendarRange(CALENDAR_INITIAL_DAYS,CALENDAR_DAYS-CALENDAR_INITIAL_DAYS)
-      .then(()=>{renderCalendar();allCalendarRangesReadyResolve?.();})
-      .catch(error=>console.warn('Не удалось догрузить вторую часть календаря:',error));
     return {ok:true};
   }catch(e){
     console.error('Ошибка загрузки календаря:',e);
     setCalendarLoading(false);
-    loadedCalendarDays.clear();calendarEvents=[];calendarConfig={events:[],freeWindows:[],blocks:[]};calendarIndex=new Map();
+    loadedCalendarDays.clear();calendarEvents=[];calendarConfig={events:[],freeWindows:[],blocks:[]};calendarIndex=new Map();calendarLoadedThrough=0;
     renderCalendar();showError(e.message||'Не удалось загрузить календарь.');throw e;
   }
 }
+
+async function loadNextCalendarChunk(){
+  if(calendarRangeLoading||calendarLoadedThrough>=CALENDAR_DAYS)return;
+  const offset=calendarLoadedThrough;
+  const days=Math.min(CALENDAR_CHUNK_DAYS,CALENDAR_DAYS-offset);
+  calendarRangeLoading=true;
+  try{
+    await fetchCalendarRange(offset,days);
+    renderCalendar();
+  }catch(error){
+    console.warn('Не удалось догрузить часть календаря:',error);
+  }finally{calendarRangeLoading=false;}
+}
+
+function maybeLoadNextCalendarChunk(){
+  const scroller=calendar.querySelector('.calendar-scroll');
+  if(!scroller||calendarRangeLoading||calendarLoadedThrough>=CALENDAR_DAYS)return;
+  const dayWidth=scroller.scrollWidth/CALENDAR_DAYS;
+  const loadedRight=calendarLoadedThrough*dayWidth;
+  const visibleRight=scroller.scrollLeft+scroller.clientWidth;
+  if(visibleRight>=loadedRight-scroller.clientWidth*0.8)loadNextCalendarChunk();
+}
+
+function handleCalendarScroll(){
+  clearTimeout(calendarScrollTimer);
+  calendarScrollTimer=setTimeout(maybeLoadNextCalendarChunk,40);
+}
+
+async function refreshCalendarDay(date){
+  const geometry=ensureCalendarGeometry(),target=geometry.days.findIndex(d=>dateString(d)===String(date));
+  if(target<0||target>=calendarLoadedThrough)return false;
+  await fetchCalendarRange(target,1);
+  renderCalendar();
+  return true;
+}
+window.refreshCalendarDay=refreshCalendarDay;
 
 function renderActivities(){if(!activities.length){activitiesContainer.innerHTML='<div class="load-error">Не удалось найти активности.</div>';return;}const icons=['◌','✦','✎','◆','●','◇'];const rows=[];for(let i=0;i<activities.length;i+=3)rows.push(activities.slice(i,i+3));activitiesContainer.innerHTML=rows.map(row=>`<div class="choice-row" style="grid-template-columns:repeat(${row.length},minmax(0,1fr))">${row.map(a=>{return`<article class="choice" data-action="${esc(a.key)}"><span class="choice-icon"${activityStyle(a.color)}>${icons[activities.indexOf(a)%icons.length]}</span><strong class="choice-title">${esc(a.title)}</strong><button class="choice-book" type="button" data-book="${esc(a.key)}">Записаться</button></article>`;}).join('')}</div>`).join('');activitiesContainer.querySelectorAll('.choice').forEach(card=>card.addEventListener('click',e=>{const key=card.dataset.action;if(e.target.closest('.choice-book')){e.stopPropagation();openEventChooser(key);return;}openActivity(key);}));}
 function renderActivityLegend(){if(!activityLegend)return;const base='<span><i class="dot free"></i> свободно</span>';const activityItems=activities.map(a=>`<span><i class="dot"${activityStyle(a.color)}></i> ${esc(a.title)}</span>`).join('');activityLegend.innerHTML=base+activityItems;}
@@ -183,7 +219,13 @@ function renderCell(date,hour){
   if(!isCalendarDayLoaded(date))return`<div class="calendar-cell calendar-loading-cell"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span></div>`;
   const state=cellState(date,hour);const valid=selectedStartValid(date,start);if(state.kind==='closed')return`<div class="calendar-cell calendar-closed"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span></div>`;if(state.kind==='free')return`<button type="button" class="calendar-cell calendar-free ${valid?'selected-start':''}" data-date="${esc(date)}" data-hour="${hour}"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span></button>`;const primary=state.display||state.events[0];const occupancy=primary?.isBooking?bookingEventOccupancy(primary):null;const full=Boolean(occupancy&&occupancy.capacity>0&&occupancy.occupied>=occupancy.capacity);const color=eventColor(primary);const label=bookingEventName(primary)||'занято';const joinable=bookingEventJoinable(primary);const clickable=valid||joinable;const occupancyHtml=occupancy?`<small>${occupancy.occupied<occupancy.capacity?'<i class="occupancy-dot" aria-hidden="true"></i>':''}${occupancy.occupied}/${occupancy.capacity}</small>`:'';const style=eventStyle(color);return clickable?`<button type="button" class="calendar-cell calendar-booked ${full?'fully-booked':''} ${joinable?'calendar-joinable':''} ${valid?'selected-start':''}"${style} data-date="${esc(date)}" data-hour="${hour}"><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span><strong>${esc(label)}</strong>${occupancyHtml}</button>`:`<div class="calendar-cell calendar-booked ${full?'fully-booked':''}"${style}><span class="calendar-cell-time">${timeKey(start)}–${timeKey(start+60)}</span><strong>${esc(label)}</strong>${occupancyHtml}</div>`;
 }
-function renderCalendar(){const geometry=ensureCalendarGeometry();const dayHeads=geometry.days.map(d=>`<div class="calendar-day-head">${esc(dateText(d))}</div>`).join('');const columns=geometry.days.map(d=>{const date=dateString(d);const cells=geometry.hours.map(hour=>renderCell(date,hour)).join('');return`<div class="calendar-column">${cells}</div>`;}).join('');calendar.innerHTML=`<div class="calendar-scroll"><div class="calendar-grid"><div class="calendar-corner"></div><div class="calendar-days">${dayHeads}</div><div class="calendar-times"></div><div class="calendar-columns">${columns}</div></div></div>`;calendar.classList.toggle('calendar-loading',calendarLoading);updateCalendarPrompt();calendar.querySelectorAll('.calendar-free').forEach(el=>el.addEventListener('click',()=>handleFreeCell(el.dataset.date,Number(el.dataset.hour))));calendar.querySelectorAll('.calendar-joinable').forEach(el=>el.addEventListener('click',()=>handleJoinableCell(el.dataset.date,Number(el.dataset.hour))));}
+function renderCalendar(){
+  const existingScroller=calendar.querySelector('.calendar-scroll'),savedScrollLeft=existingScroller?existingScroller.scrollLeft:0;
+  const geometry=ensureCalendarGeometry();const dayHeads=geometry.days.map(d=>`<div class="calendar-day-head">${esc(dateText(d))}</div>`).join('');const columns=geometry.days.map(d=>{const date=dateString(d);const cells=geometry.hours.map(hour=>renderCell(date,hour)).join('');return`<div class="calendar-column">${cells}</div>`;}).join('');calendar.innerHTML=`<div class="calendar-scroll"><div class="calendar-grid"><div class="calendar-corner"></div><div class="calendar-days">${dayHeads}</div><div class="calendar-times"></div><div class="calendar-columns">${columns}</div></div></div>`;
+  const nextScroller=calendar.querySelector('.calendar-scroll');if(nextScroller)nextScroller.scrollLeft=savedScrollLeft;
+  calendar.classList.toggle('calendar-loading',calendarLoading);updateCalendarPrompt();calendar.querySelectorAll('.calendar-free').forEach(el=>el.addEventListener('click',()=>handleFreeCell(el.dataset.date,Number(el.dataset.hour))));calendar.querySelectorAll('.calendar-joinable').forEach(el=>el.addEventListener('click',()=>handleJoinableCell(el.dataset.date,Number(el.dataset.hour))));
+  maybeLoadNextCalendarChunk();
+}
 function promptActivityChoice(){const cards=[...activitiesContainer.querySelectorAll('.choice')];cards.forEach(x=>x.classList.remove('choice-highlight'));let count=0;const flash=()=>{cards.forEach(x=>x.classList.toggle('choice-highlight'));count++;if(count<4)setTimeout(flash,count===1?120:180);else cards.forEach(x=>x.classList.remove('choice-highlight'));};flash();activitiesContainer.scrollIntoView({behavior:'smooth',block:'center'});}
 async function handleFreeCell(date,hour){const start=hour*60;if(!selectedCalendar.activity){promptActivityChoice();return;}if(!selectedStartValid(date,start)){showError('выберите пожалуйста слот повыше, а то мы закончим очень поздно)');return;}openNewBooking(date,start);}
 function handleJoinableCell(date,hour){const event=bookingEventsForCell(date,hour).find(bookingEventJoinable);if(!event)return;openExistingBooking(event,date,hour);}
@@ -198,7 +240,7 @@ function bookingPayload(date,start,end,context=selectedCalendar){const event=eve
 function openNewBooking(date,start){const context={activity:selectedCalendar.activity,name:selectedCalendar.name};const event=eventForContext(context);if(!event)return;const duration=selectedDuration(context);if(!duration)return;const name=event.name;const slot=bookingPayload(date,start,start+duration,context);slot.name=name;if(isDiogenActivity(context.activity)){const options=diogenEndOptions(date,start,context);openBooking(slot,{diogen:true,endOptions:options,context});}else openBooking(slot,{diogen:false,endOptions:[start+duration],context});}
 function openExistingBooking(event,clickedDate='',clickedHour=NaN){if(!event||eventHasStarted(event))return;const name=bookingEventName(event);const eventData=eventForContext({name});if(!eventData)return;const occupancy=bookingEventOccupancy(event);const free=Math.max(0,Number(occupancy?.capacity||0)-Number(occupancy?.occupied||0));if(free<1)return;const context={activity:eventData.activity,name:eventData.name};const date=eventDate(event),existingStart=eventStartMinutes(event),existingEnd=eventEndMinutes(event);if(!date||!Number.isFinite(existingStart)||!Number.isFinite(existingEnd)||existingEnd<=existingStart)return;const diogen=isDiogenActivity(context.activity);const start=diogen&&clickedDate===date&&Number.isFinite(clickedHour)?Math.max(existingStart,Number(clickedHour)*60):existingStart;if(start>=existingEnd)return;const endOptions=diogen?diogenEndOptions(date,start,context).filter(x=>x<=existingEnd):[existingEnd];if(!endOptions.length)return;const slot=bookingPayload(date,start,endOptions[endOptions.length-1],context);slot.name=eventData.name;slot.free=free;slot.capacity=Number(occupancy.capacity);slot.minTickets=1;slot.available=true;openBooking(slot,{diogen,endOptions,context});}
 function createBookingPicker(container,values,initial,formatValue,onChange){const items=values.slice();let index=Math.max(0,items.indexOf(initial));if(index<0)index=0;let pointerY=null;let startY=0;let startIndex=0;let dragging=false;const step=20;const track=document.createElement('div');track.className='booking-picker-track';container.innerHTML='';container.appendChild(track);const render=()=>{track.innerHTML='';items.forEach((value,i)=>{const item=document.createElement('button');item.type='button';item.className=`booking-picker-item${i===index?' active':''}`;item.dataset.index=String(i);item.textContent=formatValue(value);item.addEventListener('click',()=>{if(dragging||i===index)return;index=i;render();position(true);onChange(items[index]);});track.appendChild(item);});};const position=(animate=true,rawIndex=index)=>{track.style.transition=animate?'transform 180ms ease-out':'none';track.style.transform=`translateY(${-rawIndex*step}px)`;};const commit=next=>{const clamped=Math.max(0,Math.min(items.length-1,next));index=clamped;render();position(true);onChange(items[index]);};const move=direction=>commit(index+direction);container.addEventListener('pointerdown',e=>{pointerY=e.clientY;startY=e.clientY;startIndex=index;dragging=false;container.setPointerCapture?.(e.pointerId);track.style.transition='none';});container.addEventListener('pointermove',e=>{if(pointerY===null)return;const delta=e.clientY-startY;dragging=Math.abs(delta)>=4;const raw=Math.max(0,Math.min(items.length-1,startIndex-(delta/step)));track.style.transition='none';track.style.transform=`translateY(${-raw*step}px)`;});container.addEventListener('pointerup',e=>{if(pointerY===null)return;const delta=e.clientY-startY;pointerY=null;const next=Math.max(0,Math.min(items.length-1,Math.round(startIndex-(delta/step))));commit(next);setTimeout(()=>{dragging=false;},0);});container.addEventListener('pointercancel',()=>{pointerY=null;commit(index);setTimeout(()=>{dragging=false;},0);});container.addEventListener('wheel',e=>{e.preventDefault();move(e.deltaY>0?1:-1);},{passive:false});render();position(false);return{getValue:()=>items[index],setValue:value=>{const next=items.indexOf(value);if(next<0)return;index=next;render();position(false);onChange(items[index]);}};}
-function openBooking(slot,options={}){const modal=ensureBookingModal(),title=modal.querySelector('.booking-title'),body=modal.querySelector('.booking-body'),submit=modal.querySelector('.booking-submit');const context=options.context||selectedCalendar;const start=slotDateTime(slot.start).minutes,diogen=options.diogen??isDiogenActivity(slot.activity);const endOptions=options.endOptions?.length?options.endOptions:[start+selectedDuration(context)];const maxTickets=Math.max(1,Number(slot.free||slot.capacity||1));if(slot.minTickets===null||slot.minTickets===undefined){showError('Для этого ивента не задано минимальное количество мест.');return;}const minTickets=Math.max(1,Math.min(maxTickets,Number(slot.minTickets)));title.innerHTML=`<span class="booking-activity-name">${esc(activityByKey(slot.activity)?.title||slot.activity)}</span><span class="booking-event-name">${esc(slot.name||'')}</span>`;const ticketValues=Array.from({length:maxTickets-minTickets+1},(_,i)=>minTickets+i);body.innerHTML=`<div class="booking-datetime"><div><strong>${esc(timeKey(start))}</strong></div><span class="booking-dash">—</span><div>${diogen&&endOptions.length>1?`<div class="booking-picker booking-end-picker booking-inline-picker" tabindex="0" aria-label="Время окончания"></div>`:`<strong class="booking-end-value">${esc(timeKey(endOptions[0]))}</strong>`}</div></div><div class="booking-date"><strong>${esc(formatBookingDate(slot.date))}</strong></div><div class="booking-ticket-line"><span class="booking-picker-label">Количество билетов:</span><div class="booking-picker booking-tickets-picker booking-inline-picker" tabindex="0" aria-label="Количество билетов"></div></div>${!diogen&&endOptions.length?`<input class="booking-end" type="hidden" value="${timeKey(endOptions[0])}">`:''}<p class="booking-hint">${diogen?'Можно занять несколько последовательных часов.':''}</p>`;const endPicker=body.querySelector('.booking-end-picker');const ticketsPicker=body.querySelector('.booking-tickets-picker');let selectedEnd=endOptions[0];let selectedTickets=minTickets;if(endPicker)createBookingPicker(endPicker,endOptions,endOptions[0],timeKey,value=>{selectedEnd=value;});createBookingPicker(ticketsPicker,ticketValues,minTickets,String,value=>{selectedTickets=value;});submit.disabled=false;submit.textContent='Записаться';submit.onclick=async()=>{const tickets=selectedTickets;const endTime=timeKey(selectedEnd);const end=slotDateTime(`${slot.date} ${endTime}`).minutes;if(end<=start||end>CALENDAR_END_HOUR*60){showError('Неверное время окончания.');return;}submit.disabled=true;submit.textContent='Проверяем...';try{if(!selectedStartValid(slot.date,start,context))throw Error('За время заполнения формы этот старт больше недоступен. Календарь обновлён.');const fresh=bookingPayload(slot.date,start,end,context);if(slot.capacity&&slot.free!==undefined){fresh.capacity=slot.capacity;fresh.free=Math.min(fresh.free,slot.free);}if(!fresh.available||tickets>fresh.free)throw Error('За время заполнения формы свободных мест стало меньше. Календарь обновлён.');await apiBook(fresh,tickets,endTime);await loadBookingData();modal.classList.add('hidden');}catch(e){showError(e.message||'Не удалось создать запись.');submit.disabled=false;submit.textContent='Записаться';}};modal.classList.remove('hidden');}
+function openBooking(slot,options={}){const modal=ensureBookingModal(),title=modal.querySelector('.booking-title'),body=modal.querySelector('.booking-body'),submit=modal.querySelector('.booking-submit');const context=options.context||selectedCalendar;const start=slotDateTime(slot.start).minutes,diogen=options.diogen??isDiogenActivity(slot.activity);const endOptions=options.endOptions?.length?options.endOptions:[start+selectedDuration(context)];const maxTickets=Math.max(1,Number(slot.free||slot.capacity||1));if(slot.minTickets===null||slot.minTickets===undefined){showError('Для этого ивента не задано минимальное количество мест.');return;}const minTickets=Math.max(1,Math.min(maxTickets,Number(slot.minTickets)));title.innerHTML=`<span class="booking-activity-name">${esc(activityByKey(slot.activity)?.title||slot.activity)}</span><span class="booking-event-name">${esc(slot.name||'')}</span>`;const ticketValues=Array.from({length:maxTickets-minTickets+1},(_,i)=>minTickets+i);body.innerHTML=`<div class="booking-datetime"><div><strong>${esc(timeKey(start))}</strong></div><span class="booking-dash">—</span><div>${diogen&&endOptions.length>1?`<div class="booking-picker booking-end-picker booking-inline-picker" tabindex="0" aria-label="Время окончания"></div>`:`<strong class="booking-end-value">${esc(timeKey(endOptions[0]))}</strong>`}</div></div><div class="booking-date"><strong>${esc(formatBookingDate(slot.date))}</strong></div><div class="booking-ticket-line"><span class="booking-picker-label">Количество билетов:</span><div class="booking-picker booking-tickets-picker booking-inline-picker" tabindex="0" aria-label="Количество билетов"></div></div>${!diogen&&endOptions.length?`<input class="booking-end" type="hidden" value="${timeKey(endOptions[0])}">`:''}<p class="booking-hint">${diogen?'Можно занять несколько последовательных часов.':''}</p>`;const endPicker=body.querySelector('.booking-end-picker');const ticketsPicker=body.querySelector('.booking-tickets-picker');let selectedEnd=endOptions[0];let selectedTickets=minTickets;if(endPicker)createBookingPicker(endPicker,endOptions,endOptions[0],timeKey,value=>{selectedEnd=value;});createBookingPicker(ticketsPicker,ticketValues,minTickets,String,value=>{selectedTickets=value;});submit.disabled=false;submit.textContent='Записаться';submit.onclick=async()=>{const tickets=selectedTickets;const endTime=timeKey(selectedEnd);const end=slotDateTime(`${slot.date} ${endTime}`).minutes;if(end<=start||end>CALENDAR_END_HOUR*60){showError('Неверное время окончания.');return;}submit.disabled=true;submit.textContent='Проверяем...';try{if(!selectedStartValid(slot.date,start,context))throw Error('За время заполнения формы этот старт больше недоступен. Календарь обновлён.');const fresh=bookingPayload(slot.date,start,end,context);if(slot.capacity&&slot.free!==undefined){fresh.capacity=slot.capacity;fresh.free=Math.min(fresh.free,slot.free);}if(!fresh.available||tickets>fresh.free)throw Error('За время заполнения формы свободных мест стало меньше. Календарь обновлён.');await apiBook(fresh,tickets,endTime);await refreshCalendarDay(slot.date);modal.classList.add('hidden');}catch(e){showError(e.message||'Не удалось создать запись.');submit.disabled=false;submit.textContent='Записаться';}};modal.classList.remove('hidden');}
 async function apiBook(slot,tickets,endTime=''){const currentUser=telegramUser();const telegramId=currentUser?.id;if(!telegramId)throw Error('Не удалось определить Telegram ID. Откройте мини-приложение из Telegram.');const payload={action:'book',telegramId:String(telegramId),name:String(currentUser?.first_name||currentUser?.username||'гость'),activity:slot.activity,eventName:slot.name,date:slot.date,time:slot.time,tickets:Number(tickets),endTime};const r=await fetch(BOOKING_API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload),redirect:'follow'});const text=await r.text();let j;try{j=JSON.parse(text);}catch(e){throw Error(`Сервер вернул не JSON: ${text.slice(0,200)}`);}if(!j.ok)throw Error(j.error||'Не удалось создать бронь.');return j;}
 
 function closeActivity(){activityModal.classList.add('hidden');}
@@ -206,4 +248,5 @@ modalClose?.addEventListener('click',closeActivity);modalOk?.addEventListener('c
 document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;activityModal?.classList.add('hidden');eventsModal?.classList.add('hidden');bookingModal?.classList.add('hidden');closeError();});
 
 renderCalendarSkeleton();
+calendar.addEventListener('scroll',handleCalendarScroll,true);
 (async()=>{try{await Promise.all([loadActivities(),loadEvents(),loadBookingData()]);}catch(e){console.error(e);}})();

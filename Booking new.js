@@ -20,16 +20,7 @@ const CALENDAR_CACHE_PREFIX='calendar-v2:';
 function doGet(e){
   try{
     const action=String(e?.parameter?.action||'');
-    if(action==='normalize-free'){
-      const lock=LockService.getScriptLock();lock.waitLock(30000);
-      try{
-        journalLog('NORMALIZE START','background free-slot normalization');
-        synchronizeCalendar();
-        clearCalendarCache();
-        journalLog('NORMALIZE END','background free-slot normalization');
-        return jsonResponse({ok:true});
-      }finally{lock.releaseLock();}
-    }
+    if(action==='normalize-free')return jsonResponse({ok:true,skipped:true});
     if(action==='calendar')return jsonResponse(getCalendarRangeData(e?.parameter||{}));
     if(action==='bookings')return jsonResponse(getBookingsData());
     return jsonResponse(getBookingData());
@@ -107,11 +98,12 @@ function createBooking(data){
     if(!hasExisting){const min=Number(event.min);if(!Number.isFinite(min)||min<1)throw Error('Для нового мероприятия не задано минимальное количество мест.');if(tickets<min)throw Error('Для нового мероприятия нужно забронировать минимум '+min+' мест.');}
     hours.forEach(function(h){getAllBookingsAtStart(bookings,h.start).forEach(function(b){if(!sameEvent(b,event))throw Error('Это время уже занято другим мероприятием.');});});
     const id=getNextBookingId(bs),slotId=makeBookingSlotId(event,start,end);
+    const newBooking={id:id,telegramId:telegramId,telegramName:telegramName,activity:String(event.activity).trim(),name:String(event.name).trim(),date:date,time:time,tickets:tickets,status:'active',slotId:slotId};
     bs.appendRow([id,telegramId,telegramName,String(event.activity).trim(),String(event.name).trim(),date,time,tickets,'active',slotId]);
-    const row=bs.getLastRow(),updated=readBookings(bs);
+    const row=bs.getLastRow(),updated=bookings.concat([newBooking]);
     try{syncCalendarBooking(event,start,end,updated,{action:'book',bookingId:id,tickets:tickets,telegramName:telegramName,activityKey:activity});}catch(e){try{bs.deleteRow(row);}catch(x){Logger.log(x.message);}throw e;}
     clearCalendarCache();
-    const finalBookings=readBookings(bs),slotBookings=getBookingsForExactSlot(finalBookings,start,event),occupied=calculateOccupancy(slotBookings);
+    const slotBookings=getBookingsForExactSlot(updated,start,event),occupied=calculateOccupancy(slotBookings);
     return {ok:true,booking:{id:id,telegramId:telegramId,telegramName:telegramName,activity:event.activity,name:event.name,date:date,time:time,endTime:formatTime(end),tickets:tickets,status:'active',slotId:slotId},slot:{slotId:slotId,start:formatDateTime(start),end:formatDateTime(end),capacity:capacity,occupied:occupied,free:Math.max(0,capacity-occupied)}};
   }finally{lock.releaseLock();}
 }
@@ -193,10 +185,11 @@ function isDiogenActivity(activityKey){
   return keys.some(function(r){return String(r[0]||'').trim().toLowerCase()===key;});
 }
 
-function syncCalendarBooking(event,start,end,bookings,operation){const activityKey=String(operation&&operation.activityKey||event.activity||'').trim();if(isDiogenActivity(activityKey))return syncDiogenCalendarBooking(event,start,end,bookings,operation);const calendar=getBookingCalendar(),existing=calendar.getEvents(start,end).filter(function(e){if(!isBookingCalendarEvent(e))return false;const p=parseCalendarSlotId(e.getDescription()),title=String(e.getTitle()||'').trim(),expected=String(event.activity).trim()+' — '+String(event.name).trim();return(Boolean(p&&calendarSlotMatchesEvent(p,event))||title===expected);});let ce=existing[0]||null,baseStart=start,baseEnd=end;if(ce){const p=parseCalendarSlotId(ce.getDescription()),parsedStart=p&&p.start?parseCompactDateTime(p.start):null;if(parsedStart){baseStart=parsedStart;baseEnd=ce.getEndTime();}}const active=getBookingsForExactSlot(bookings,baseStart,event),occupancy=calculateOccupancy(active);if(occupancy<=0){existing.forEach(function(e){e.deleteEvent();});restoreFreeHours(baseStart,baseEnd);return;}const title=String(event.activity).trim()+' — '+String(event.name).trim(),description=buildCalendarDescription(event,baseStart,bookings);existing.slice(1).forEach(function(e){e.deleteEvent();});if(!ce)ce=calendar.createEvent(title,baseStart,baseEnd,{description:description});else{ce.setTitle(title);ce.setDescription(description);}}
+function syncCalendarBooking(event,start,end,bookings,operation){const activityKey=String(operation&&operation.activityKey||event.activity||'').trim();if(isDiogenActivity(activityKey))return syncDiogenCalendarBooking(event,start,end,bookings,operation);const calendar=getBookingCalendar(),existing=calendar.getEvents(start,end).filter(function(e){if(!isBookingCalendarEvent(e))return false;const p=parseCalendarSlotId(e.getDescription()),title=String(e.getTitle()||'').trim(),expected=String(event.activity).trim()+' — '+String(event.name).trim();return(Boolean(p&&calendarSlotMatchesEvent(p,event))||title===expected);});let ce=existing[0]||null,baseStart=start,baseEnd=end;if(ce){const p=parseCalendarSlotId(ce.getDescription()),parsedStart=p&&p.start?parseCompactDateTime(p.start):null;if(parsedStart){baseStart=parsedStart;baseEnd=ce.getEndTime();}}const active=getBookingsForExactSlot(bookings,baseStart,event),occupancy=calculateOccupancy(active);if(occupancy<=0){existing.forEach(function(e){e.deleteEvent();});restoreFreeHours(baseStart,baseEnd);return;}const title=String(event.activity).trim()+' — '+String(event.name).trim(),description=buildCalendarDescription(event,baseStart,bookings);existing.slice(1).forEach(function(e){e.deleteEvent();});if(!ce)ce=calendar.createEvent(title,baseStart,baseEnd,{description:description});else{ce.setTitle(title);ce.setDescription(description);}occupyFreeCalendarInterval(baseStart,baseEnd);}
 
 function syncDiogenCalendarBooking(event,start,end,bookings,operation){
   if(!operation||!operation.action||!operation.bookingId)throw Error('Не определена операция Диогена.');
+  normalizeFreeHoursForRange(start,end);
   const calendar=getBookingCalendar(),hours=getHourlyRanges(start,end),title=String(event.activity).trim()+' — '+String(event.name).trim(),states=[];
   journalLog('DIOGEN SYNC START','bookingId='+String(operation.bookingId)+' | action='+String(operation.action)+' | start='+formatDateTime(start)+' | end='+formatDateTime(end)+' | hours='+hours.map(function(h){return formatDateTime(h.start)+' -> '+formatDateTime(h.end);}).join(' || '));
   hours.forEach(function(h){
@@ -276,6 +269,33 @@ function parseDiogenCalendarState(description,fallbackCapacity){
 }
 function buildDiogenCalendarDescription(event,start,state){const slotId=makeSlotId(event,start),entries=state.entries||[];return [BOOKING_MARKER+slotId].concat(entries.map(function(e){return DIOGEN_ENTRY_MARKER+String(e.bookingId)+'|'+(Number(e.tickets)||0)+'|'+encodeURIComponent(String(e.telegramName||''));})).concat([Math.max(0,Number(state.occupancy)||0)+'/'+(Number(state.capacity)||getCapacity(event))]).join('\n');}
 function buildCalendarDescription(event,start,bookings){const slotId=makeSlotId(event,start),active=getBookingsForExactSlot(bookings,start,event),occ=calculateOccupancy(active),cap=getCapacity(event);return [BOOKING_MARKER+slotId].concat(active.map(function(b){return String(b.telegramName||'').trim()+' ('+(Number(b.tickets)||0)+')';})).concat([occ+'/'+cap]).join('\n');}
+function occupyFreeCalendarInterval(start,end){
+  if(!(start instanceof Date)||!(end instanceof Date)||end<=start)return;
+  const c=getBookingCalendar(),overlapping=c.getEvents(start,end).filter(function(e){return String(e.getTitle()||'').trim()===FREE_EVENT_TITLE;});
+  overlapping.forEach(function(f){
+    const fs=f.getStartTime(),fe=f.getEndTime();
+    if(fe<=start||fs>=end)return;
+    f.deleteEvent();
+    if(fs<start)c.createEvent(FREE_EVENT_TITLE,fs,new Date(Math.min(start.getTime(),fe.getTime())));
+    if(fe>end)c.createEvent(FREE_EVENT_TITLE,new Date(Math.max(end.getTime(),fs.getTime())),fe);
+  });
+}
+function normalizeFreeHoursForRange(start,end){
+  if(!(start instanceof Date)||!(end instanceof Date)||end<=start)return;
+  const c=getBookingCalendar(),overlapping=c.getEvents(start,end).filter(function(e){return String(e.getTitle()||'').trim()===FREE_EVENT_TITLE;});
+  overlapping.forEach(function(f){
+    const fs=f.getStartTime(),fe=f.getEndTime();
+    if(fe<=start||fs>=end)return;
+    const from=new Date(Math.max(fs.getTime(),start.getTime())),to=new Date(Math.min(fe.getTime(),end.getTime()));
+    f.deleteEvent();
+    if(fs<from)c.createEvent(FREE_EVENT_TITLE,fs,from);
+    for(let s=new Date(from);s<to;s=addMinutes(s,60)){
+      const e=new Date(Math.min(to.getTime(),addMinutes(s,60).getTime()));
+      if(e>s)c.createEvent(FREE_EVENT_TITLE,s,e);
+    }
+    if(fe>to)c.createEvent(FREE_EVENT_TITLE,to,fe);
+  });
+}
 function restoreFreeHours(start,end){const c=getBookingCalendar();for(let s=new Date(start);s<end;s=addMinutes(s,60)){const e=addMinutes(s,60),events=c.getEvents(s,e),hasBlock=events.some(function(x){const t=String(x.getTitle()||'').trim();return t!==FREE_EVENT_TITLE&&!isBookingCalendarEvent(x);}),hasFree=events.some(function(x){return String(x.getTitle()||'').trim()===FREE_EVENT_TITLE&&x.getStartTime().getTime()===s.getTime()&&x.getEndTime().getTime()===e.getTime();});if(!hasBlock&&!hasFree)c.createEvent(FREE_EVENT_TITLE,s,e);}}
 function synchronizeCalendar(){const c=getBookingCalendar(),now=new Date(),from=startOfDay(now),to=new Date(from);to.setDate(to.getDate()+LOOKAHEAD_DAYS+1);const all=c.getEvents(from,to),free=all.filter(function(e){return String(e.getTitle()||'').trim()===FREE_EVENT_TITLE;}),bookings=all.filter(isBookingCalendarEvent),blocks=all.filter(function(e){const t=String(e.getTitle()||'').trim();return t!==FREE_EVENT_TITLE&&!isBookingCalendarEvent(e);});if(!free.length)return;const desired={};free.forEach(function(f){const rawStart=f.getStartTime(),rawEnd=f.getEndTime(),start=new Date(rawStart);start.setMinutes(0,0,0);const end=new Date(rawEnd);if(end.getMinutes()!==0||end.getSeconds()!==0||end.getMilliseconds()!==0)end.setHours(end.getHours()+1);end.setMinutes(0,0,0);for(let s=new Date(start);s<end;s=addMinutes(s,60)){const e=addMinutes(s,60);if(!intersectsCalendarEvents(s,e,blocks)&&!intersectsCalendarEvents(s,e,bookings))desired[s.getTime()+'_'+e.getTime()]={s:s,e:e};}});free.forEach(function(f){const k=f.getStartTime().getTime()+'_'+f.getEndTime().getTime();if(!desired[k])f.deleteEvent();});Object.keys(desired).forEach(function(k){const d=desired[k];if(free.some(function(f){return f.getStartTime().getTime()===d.s.getTime()&&f.getEndTime().getTime()===d.e.getTime();}))return;c.createEvent(FREE_EVENT_TITLE,d.s,d.e);});}
 function intersectsCalendarEvents(s,e,events){return events.some(function(x){return s.getTime()<x.getEndTime().getTime()&&e.getTime()>x.getStartTime().getTime();});}
@@ -293,7 +313,7 @@ function parseBookingDateTime(d,t){const r=Utilities.parseDate(String(d)+' '+Str
 function parseDuration(v){if(v===null||v===undefined||v==='')return 0;if(typeof v==='number')return v;const s=String(v).trim().toLowerCase(),m=s.match(/(\d+(?:[.,]\d+)?)/);if(!m)return 0;const n=Number(m[1].replace(',','.'));return s.indexOf('мин')>=0?n/60:n;}
 function parseAmount(v){const m=String(v??'').match(/\d+/);return m?Number(m[0]):0;}
 function getCapacity(e){return Math.max(0,Number(e.amount)||0);}
-function getNextBookingId(sheet){if(sheet.getLastRow()<2)return 1;return Math.max(0,...sheet.getRange(2,1,sheet.getLastRow()-1,1).getValues().map(function(r){return Number(r[0])||0;}))+1;}
+function getNextBookingId(sheet){const last=sheet.getLastRow();if(last<2)return 1;return(Number(sheet.getRange(last,1).getValue())||0)+1;}
 function normalizeDateValue(v){return v instanceof Date&&!isNaN(v)?formatDate(v):String(v??'').trim();}
 function normalizeTimeValue(v){return v instanceof Date&&!isNaN(v)?formatTime(v):String(v??'').trim();}
 function formatDate(d){return Utilities.formatDate(d,Session.getScriptTimeZone(),'dd.MM.yyyy');}

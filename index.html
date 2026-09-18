@@ -124,6 +124,7 @@
         return activity||{key:booking.activity,title:booking.activity,color:''};
       }
       function render(items){
+        window.__bookingItemsForRefresh=items.slice();
         if(!items.length){list.innerHTML='<div class="my-bookings-empty">Активных броней пока нет.</div>';return;}
         items.sort(function(a,b){return String(a.date).localeCompare(String(b.date),'ru')||String(a.time).localeCompare(String(b.time),'ru');});
         list.innerHTML=items.map(function(booking){
@@ -170,7 +171,8 @@
           const text=await response.text();
           let data;try{data=JSON.parse(text);}catch(e){throw Error(`Сервер вернул не JSON: ${text.slice(0,180)}`);}
           if(!data.ok)throw Error(data.error||'Не удалось отменить бронь.');
-          await loadBookingData();
+          const booking=Array.isArray(window.__bookingItemsForRefresh)?window.__bookingItemsForRefresh.find(function(x){return String(x.id)===String(id);}):null;
+          if(booking?.date&&window.refreshCalendarDay)await window.refreshCalendarDay(booking.date);
           await loadMyBookings();
         }catch(error){
           if(button){button.dataset.busy='';button.disabled=false;button.textContent='Отменить';}
@@ -183,20 +185,6 @@
       closeButton?.addEventListener('click',close);
       modal?.addEventListener('click',function(event){if(event.target===modal)close();});
       document.addEventListener('keydown',function(event){if(event.key==='Escape')close();});
-    })();
-  </script>
-  <script>
-    (function runBackgroundCalendarNormalization(){
-      const url='https://script.google.com/macros/s/AKfycbwpYRqIunVa1uBfMqaf9HY4ICKXeeaCUbYLtoBxYT6e0_tYyBSvgiVfmeU-3SkEC2SqQ/exec';
-      const ready=window.bookingCalendarAllRangesReady||window.bookingCalendarFirstRangeReady||Promise.resolve();
-      ready.then(()=>fetch(url+'?action=normalize-free&ts='+Date.now(),{cache:'no-store',redirect:'follow'}))
-        .then(async response=>{
-          if(!response.ok)throw Error('HTTP '+response.status);
-          const text=await response.text();
-          const result=JSON.parse(text);
-          if(!result.ok)throw Error(result.error||'Нормализация календаря не выполнена.');
-        })
-        .catch(error=>console.warn('Фоновая нормализация календаря не выполнена:',error));
     })();
   </script>
 </body>

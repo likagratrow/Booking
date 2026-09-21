@@ -1,7 +1,7 @@
 const SHEET_ID='1FcetqNVvXNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
 const SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Активности')}&headers=0&range=A2:F`;
 const EVENTS_SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Ивенты')}&headers=0&range=A2:K`;
-const BOOKING_API_URL='https://script.google.com/macros/s/AKfycbwpYRqIunVa1uBfMqaf9HY4ICKXeeaCUbYLtoBxYT6e0_tYyBSvgiVfmeU-3SkEC2SqxQ/exec';
+const BOOKING_API_URL='https://script.google.com/macros/s/AKfycbxRPZ-OLG_UOl_T093GSlC_aeJeEBa3ujx-OVWIyBvDSqmI0TuFMp4x0v_DBUmDBL6I/exec';
 
 const tg=window.Telegram?.WebApp;
 if(tg){tg.ready();tg.expand();tg.setBackgroundColor?.('bg_color');}

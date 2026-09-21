@@ -4,6 +4,7 @@
  * Business data comes from "Ивенты"; "Брони" is the booking journal;
  * Google Calendar is the occupancy source.
  */
+const SHEET_ID='1FcetqNVvXNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
 const EVENTS_SHEET_NAME='Ивенты';
 const ACTIVITIES_SHEET_NAME='Активности';
 const BOOKING_SHEET_NAME='Брони';
@@ -17,6 +18,8 @@ const DIOGEN_ENTRY_MARKER='ST_BOOKING_ENTRY:';
 const DIOGEN_ACTIVITY_KEY='diogen';
 const CALENDAR_CACHE_TTL_SECONDS=20;
 const CALENDAR_CACHE_PREFIX='calendar-v2:';
+
+function getBookingSpreadsheet(){return SpreadsheetApp.openById(SHEET_ID);}
 
 function doGet(e){
   try{
@@ -34,14 +37,14 @@ function doPost(e){try{journalLog('POST RECEIVED','hasPostData='+Boolean(e&&e.po
 function jsonResponse(data){return ContentService.createTextOutput(JSON.stringify(data,null,2)).setMimeType(ContentService.MimeType.JSON);}
 
 function getBookingData(){
-  const ss=SpreadsheetApp.getActiveSpreadsheet(),es=ss.getSheetByName(EVENTS_SHEET_NAME),bs=ss.getSheetByName(BOOKING_SHEET_NAME);
+  const ss=getBookingSpreadsheet(),es=ss.getSheetByName(EVENTS_SHEET_NAME),bs=ss.getSheetByName(BOOKING_SHEET_NAME);
   if(!es)throw Error('Лист "'+EVENTS_SHEET_NAME+'" не найден.');if(!bs)throw Error('Лист "'+BOOKING_SHEET_NAME+'" не найден.');
   const events=readEvents(es),bookings=readBookings(bs),calendar=readCalendar();
   return {ok:true,settings:{slotStepMinutes:SLOT_STEP_MINUTES,lookaheadDays:LOOKAHEAD_DAYS},events:events,bookings:{count:bookings.length,items:bookings},calendar:{name:BOOKING_CALENDAR_NAME,events:calendar.events,freeWindows:calendar.freeWindows,blocks:calendar.blocks}};
 }
 
 function getBookingsData(){
-  const ss=SpreadsheetApp.getActiveSpreadsheet(),bs=ss.getSheetByName(BOOKING_SHEET_NAME);
+  const ss=getBookingSpreadsheet(),bs=ss.getSheetByName(BOOKING_SHEET_NAME);
   if(!bs)throw Error('Лист "'+BOOKING_SHEET_NAME+'" не найден.');
   const bookings=readBookings(bs);
   return {ok:true,bookings:{count:bookings.length,items:bookings}};
@@ -73,7 +76,7 @@ function clearCalendarCache(){
 function createBooking(data){
   const lock=LockService.getScriptLock();lock.waitLock(30000);
   try{
-    const ss=SpreadsheetApp.getActiveSpreadsheet(),es=ss.getSheetByName(EVENTS_SHEET_NAME),bs=ss.getSheetByName(BOOKING_SHEET_NAME);
+    const ss=getBookingSpreadsheet(),es=ss.getSheetByName(EVENTS_SHEET_NAME),bs=ss.getSheetByName(BOOKING_SHEET_NAME);
     if(!es||!bs)throw Error('Не найден лист бронирований или мероприятий.');
     const events=readEvents(es),bookings=readBookings(bs);
     const tickets=Number(data.tickets);if(!Number.isInteger(tickets)||tickets<1)throw Error('Количество билетов должно быть целым числом от 1.');
@@ -112,7 +115,7 @@ function createBooking(data){
 function cancelBooking(data){
   const lock=LockService.getScriptLock();lock.waitLock(30000);
   try{
-    const ss=SpreadsheetApp.getActiveSpreadsheet(),bs=ss.getSheetByName(BOOKING_SHEET_NAME);if(!bs)throw Error('Лист "'+BOOKING_SHEET_NAME+'" не найден.');
+    const ss=getBookingSpreadsheet(),bs=ss.getSheetByName(BOOKING_SHEET_NAME);if(!bs)throw Error('Лист "'+BOOKING_SHEET_NAME+'" не найден.');
     const map=getBookingColumnMap(bs),id=String(data.bookingId??data.id??'').trim();if(!id)throw Error('Не указан ID брони.');
     const rows=bs.getLastRow()<2?[]:bs.getRange(2,1,bs.getLastRow()-1,10).getValues();let rowNumber=null,booking=null;
     rows.forEach(function(row,i){if(rowNumber!==null)return;if(String(row[map.id]).trim()===id){rowNumber=i+2;booking=bookingFromRow(row,map);}});
@@ -147,7 +150,7 @@ function normalizeStatus(v){return String(v||'').trim()||'active';}
 function resolveTelegramName(data){const username=String(data.telegramName||data.username||'').trim();if(username)return username.charAt(0)==='@'?username:'@'+username;return String(data.name||'').trim().replace(/^@/,'');}
 
 function findEventByIdentity(events,activity,name){const a=String(activity||'').trim(),n=String(name||'').trim(),matches=events.filter(function(e){return String(e.name).trim()===n;});if(a){const exact=matches.filter(function(e){return String(e.activity).trim()===a;});if(exact.length===1)return exact[0];}if(matches.length===1)return matches[0];return null;}
-function findEventForBooking(b){const ss=SpreadsheetApp.getActiveSpreadsheet(),sheet=ss.getSheetByName(EVENTS_SHEET_NAME),events=readEvents(sheet),exact=findEventByIdentity(events,b.activity,b.name);if(exact)return exact;const parsed=parseBookingSlotId(b.slotId)||parseOldSlotId(b.slotId);if(parsed)return findEventByIdentity(events,parsed.activity,parsed.eventName);return null;}
+function findEventForBooking(b){const ss=getBookingSpreadsheet(),sheet=ss.getSheetByName(EVENTS_SHEET_NAME),events=readEvents(sheet),exact=findEventByIdentity(events,b.activity,b.name);if(exact)return exact;const parsed=parseBookingSlotId(b.slotId)||parseOldSlotId(b.slotId);if(parsed)return findEventByIdentity(events,parsed.activity,parsed.eventName);return null;}
 function sameEvent(b,e){return String(b.activity).trim()===String(e.activity).trim()&&String(b.name).trim()===String(e.name).trim();}
 function getBookingsForExactSlot(bookings,start,event){const end=addMinutes(start,SLOT_STEP_MINUTES);return bookings.filter(function(b){if(b.status!=='active'||!sameEvent(b,event))return false;const interval=getBookingInterval(b,event);return interval.start.getTime()<end.getTime()&&interval.end.getTime()>start.getTime();});}
 function getAllBookingsAtStart(bookings,start){return bookings.filter(function(b){return b.status==='active'&&b.date===formatDate(start)&&b.time===formatTime(start);});}
@@ -180,7 +183,7 @@ function isBookingCalendarEvent(e){return String(e.getDescription()||'').indexOf
 function isDiogenActivity(activityKey){
   const key=String(activityKey||'').trim().toLowerCase();
   if(key!==DIOGEN_ACTIVITY_KEY)return false;
-  const ss=SpreadsheetApp.getActiveSpreadsheet(),sheet=ss.getSheetByName(ACTIVITIES_SHEET_NAME);
+  const ss=getBookingSpreadsheet(),sheet=ss.getSheetByName(ACTIVITIES_SHEET_NAME);
   if(!sheet||sheet.getLastRow()<2)return false;
   const keys=sheet.getRange(2,1,sheet.getLastRow()-1,1).getValues();
   return keys.some(function(r){return String(r[0]||'').trim().toLowerCase()===key;});
@@ -256,7 +259,7 @@ function buildDiogenStateFromBookings(bookings,event,h,excludeBookingId){
 
 function journalLog(kind,details){
   try{
-    const ss=SpreadsheetApp.getActiveSpreadsheet(),sheet=ss.getSheetByName(JOURNAL_SHEET_NAME);
+    const ss=getBookingSpreadsheet(),sheet=ss.getSheetByName(JOURNAL_SHEET_NAME);
     if(!sheet)return;
     if(sheet.getLastRow()===0)sheet.getRange(1,1,1,3).setValues([['Timestamp','Event','Details']]);
     sheet.appendRow([new Date(),kind,details]);

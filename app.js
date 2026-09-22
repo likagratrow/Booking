@@ -1,7 +1,8 @@
 const SHEET_ID='1FcetqNVvXNI78h0mcQdEJBEVXzkHcgaddFrCn2VOugk';
 const SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Активности')}&headers=0&range=A2:F`;
-const EVENTS_SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Ивенты')}&headers=0&range=A2:K`;
+const EVENTS_SHEET_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Ивенты')}&headers=0&range=A2:L`;
 const BOOKING_API_URL='https://script.google.com/macros/s/AKfycbxRPZ-OLG_UOl_T093GSlC_aeJeEBa3ujx-OVWIyBvDSqmI0TuFMp4x0v_DBUmDBL6I/exec';
+const ACCESS_API_URL='https://script.google.com/macros/s/AKfycbzs21P908JOT1KBK3c-iH8m7ofkIvsBwMF9pSDWCaj14Y05z7Q-ukkJ1h3OBkNB-t0p/exec';
 
 const tg=window.Telegram?.WebApp;
 if(tg){tg.ready();tg.expand();tg.setBackgroundColor?.('bg_color');}
@@ -24,6 +25,8 @@ const calendarPrompt=document.getElementById('calendar-prompt');
 const activityLegend=document.getElementById('activity-legend');
 let activities=[];
 let events=[];
+let accessLevelIds=new Set();
+let accessFull=false;
 let calendarEvents=[];
 let selectedCalendar={activity:'',name:''};
 let calendarGeometry=null;
@@ -49,6 +52,68 @@ const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 function parse(t){const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<=a)throw Error('Google Таблица не вернула данные.');return JSON.parse(t.slice(a,b+1));}
 function cell(c,i,f=''){return c[i]?.v??f;}
 function norm(v){return String(v??'').trim().toLowerCase();}
+
+function bookingAccessList(value){
+  return String(value??'')
+    .split(/[,;\\n]/)
+    .map(item=>item.trim())
+    .filter(Boolean);
+}
+
+async function loadBookingAccess(){
+  const currentUser=telegramUser();
+
+  if(!currentUser?.id){
+    accessLevelIds=new Set();
+    accessFull=false;
+    return;
+  }
+
+  try{
+    const params=new URLSearchParams({
+      action:'user',
+      telegram_id:String(currentUser.id),
+      username:String(currentUser.username||'')
+    });
+
+    const response=await fetch(`${ACCESS_API_URL}?${params.toString()}`,{
+      method:'GET',
+      cache:'no-store',
+      redirect:'follow'
+    });
+
+    if(!response.ok)throw Error(`Access API вернул HTTP ${response.status}`);
+
+    const data=await response.json();
+
+    if(!data.ok)throw Error(data.error||'Не удалось получить доступ пользователя.');
+
+    accessLevelIds=new Set(
+      Array.isArray(data.allowedLevelIds)
+        ? data.allowedLevelIds.map(item=>String(item).trim()).filter(Boolean)
+        : []
+    );
+
+    accessFull=Boolean(data.fullAccess);
+  }catch(error){
+    console.warn('Не удалось получить доступ пользователя. Используется базовый доступ:',error);
+    accessLevelIds=new Set();
+    accessFull=false;
+  }
+}
+
+function bookingEventHasAccess(event){
+  const requiredLevels=bookingAccessList(event?.access);
+
+  // Пустая L = базовый ивент, доступный всем.
+  if(!requiredLevels.length)return true;
+
+  // Полный доступ видит всё.
+  if(accessFull)return true;
+
+  // Достаточно совпадения хотя бы с одним Level ID.
+  return requiredLevels.some(levelId=>accessLevelIds.has(levelId));
+}
 function pad(n){return String(n).padStart(2,'0');}
 function dateText(d){return d.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'short',timeZone:'Asia/Yekaterinburg'}).replace(' г.','');}
 function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
@@ -123,7 +188,42 @@ function renderCalendarSkeleton(){const geometry=ensureCalendarGeometry();const 
 function setCalendarLoading(value){calendarLoading=Boolean(value);calendar.classList.toggle('calendar-loading',calendarLoading);}
 
 async function loadActivities(){activitiesContainer.innerHTML='<div class="loading-activities">Загрузка...</div>';try{const r=await fetch(SHEET_URL,{cache:'no-store'});if(!r.ok)throw Error(`Ошибка Google Таблицы: ${r.status}`);const j=parse(await r.text());activities=(j.table.rows||[]).map((x,i)=>{const c=x.c||[];return{key:String(cell(c,0,'')).trim(),title:String(cell(c,1,'')).trim(),description:String(cell(c,2,'')).trim(),image:String(cell(c,3,'')).trim(),color:String(cell(c,5,'')).trim(),index:i};}).filter(x=>x.key&&x.title);renderActivities();renderActivityLegend();}catch(e){activitiesContainer.innerHTML=`<div class="load-error">Не удалось загрузить активности: ${esc(e.message)}</div>`;}}
-async function loadEvents(){try{const r=await fetch(EVENTS_SHEET_URL,{cache:'no-store'});if(!r.ok)throw Error(`Ошибка Google Таблицы: ${r.status}`);const j=parse(await r.text());events=(j.table.rows||[]).map((x,i)=>{const c=x.c||[];return{activity:String(cell(c,0,'')).trim(),name:String(cell(c,1,'')).trim(),price:String(cell(c,2,'')).trim(),age:String(cell(c,3,'')).trim(),duration:String(cell(c,4,'')).trim(),complexity:String(cell(c,5,'')).trim(),image:String(cell(c,6,'')).trim(),description:String(cell(c,8,'')).trim(),amount:optionalNumber(cell(c,9,'')),min:optionalNumber(cell(c,10,'')),index:i};}).filter(x=>x.activity&&x.name);}catch(e){console.error('Ошибка загрузки ивентов:',e);events=[];}renderActivities();renderActivityLegend();if(calendarEvents.length)renderCalendar();}
+async function loadEvents(){
+  await loadBookingAccess();
+  try{
+    const r=await fetch(EVENTS_SHEET_URL,{cache:'no-store'});
+    if(!r.ok)throw Error(`Ошибка Google Таблицы: ${r.status}`);
+    const j=parse(await r.text());
+
+    events=(j.table.rows||[])
+      .map((x,i)=>{
+        const c=x.c||[];
+        return{
+          activity:String(cell(c,0,'')).trim(),
+          name:String(cell(c,1,'')).trim(),
+          price:String(cell(c,2,'')).trim(),
+          age:String(cell(c,3,'')).trim(),
+          duration:String(cell(c,4,'')).trim(),
+          complexity:String(cell(c,5,'')).trim(),
+          image:String(cell(c,6,'')).trim(),
+          description:String(cell(c,8,'')).trim(),
+          amount:optionalNumber(cell(c,9,'')),
+          min:optionalNumber(cell(c,10,'')),
+          access:String(cell(c,11,'')).trim(),
+          index:i
+        };
+      })
+      .filter(x=>x.activity&&x.name)
+      .filter(bookingEventHasAccess);
+  }catch(e){
+    console.error('Ошибка загрузки ивентов:',e);
+    events=[];
+  }
+
+  renderActivities();
+  renderActivityLegend();
+  if(calendarEvents.length)renderCalendar();
+}
 async function fetchCalendarRange(offsetDays,days){
   let lastError=null;
   for(let attempt=0;attempt<3;attempt++){
@@ -248,4 +348,14 @@ document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;activityModal
 
 renderCalendarSkeleton();
 calendar.addEventListener('scroll',handleCalendarScroll,true);
-(async()=>{try{await Promise.all([loadActivities(),loadEvents(),loadBookingData()]);}catch(e){console.error(e);}})();
+(async()=>{
+  try{
+    await Promise.all([
+      loadActivities(),
+      loadEvents(),
+      loadBookingData()
+    ]);
+  }catch(e){
+    console.error(e);
+  }
+})();

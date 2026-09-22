@@ -55,7 +55,7 @@ function norm(v){return String(v??'').trim().toLowerCase();}
 
 function bookingAccessList(value){
   return String(value??'')
-    .split(/[,;\\n]/)
+    .split(/[,;\n]/)
     .map(item=>item.trim())
     .filter(Boolean);
 }

@@ -20,6 +20,16 @@ const CALENDAR_CACHE_TTL_SECONDS=20;
 const CALENDAR_CACHE_PREFIX='calendar-v2:';
 const ACCESS_API_URL='https://script.google.com/macros/s/AKfycbzs21P908JOT1KBK3c-iH8m7ofkIvsBwMF9pSDWCaj14Y05z7Q-ukkJ1h3OBkNB-t0p/exec';
 
+function authorizeBookingExternalRequests(){
+  const response=UrlFetchApp.fetch('https://www.google.com/generate_204',{
+    method:'get',
+    muteHttpExceptions:true,
+    followRedirects:true
+  });
+
+  return 'OK: UrlFetchApp разрешён. HTTP '+response.getResponseCode();
+}
+
 function getBookingSpreadsheet(){return SpreadsheetApp.openById(SHEET_ID);}
 
 function doGet(e){

@@ -18,6 +18,7 @@ const DIOGEN_ENTRY_MARKER='ST_BOOKING_ENTRY:';
 const DIOGEN_ACTIVITY_KEY='diogen';
 const CALENDAR_CACHE_TTL_SECONDS=20;
 const CALENDAR_CACHE_PREFIX='calendar-v2:';
+const ACCESS_API_URL='https://script.google.com/macros/s/AKfycbzs21P908JOT1KBK3c-iH8m7ofkIvsBwMF9pSDWCaj14Y05z7Q-ukkJ1h3OBkNB-t0p/exec';
 
 function getBookingSpreadsheet(){return SpreadsheetApp.openById(SHEET_ID);}
 
@@ -84,7 +85,7 @@ function createBooking(data){
     const telegramName=resolveTelegramName(data);if(!telegramName)throw Error('Не указано имя Telegram пользователя.');
     const eventName=String(data.eventName||'').trim(),activity=String(data.activity||'').trim();
     const date=String(data.date||'').trim(),time=String(data.time||'').trim();if(!eventName||!date||!time)throw Error('Не указаны мероприятие, дата или время.');
-    const event=findEventByIdentity(events,activity,eventName);if(!event)throw Error('Выбранное мероприятие не найдено.');
+    const event=findEventByIdentity(events,activity,eventName);if(!event)throw Error('Выбранное мероприятие не найдено.');if(!bookingEventHasAccess_(telegramId,event))throw Error('У вас нет доступа к этому мероприятию.');
     const start=parseBookingDateTime(date,time);if(start.getTime()<=Date.now())throw Error('Время начала этого слота уже прошло.');
     const capacity=getCapacity(event);if(capacity<1)throw Error('Для выбранного мероприятия не задана вместимость.');
     const calendar=readCalendarRange(getCalendarOffsetDays(start),1);
@@ -131,8 +132,8 @@ function cancelBooking(data){
 }
 
 function readEvents(sheet){
-  if(sheet.getLastRow()<2)return[];const rows=sheet.getRange(2,1,sheet.getLastRow()-1,11).getValues();
-  return rows.map(function(r){return{activity:r[0]||'',name:r[1]||'',price:r[2]||'',age:r[3]||'',duration:parseDuration(r[4]),complexity:r[5]||'',image:r[6]||'',description:r[8]||'',amount:parseAmount(r[9]),min:parseAmount(r[10])};}).filter(function(e){return String(e.name).trim()!=='';});
+  if(sheet.getLastRow()<2)return[];const rows=sheet.getRange(2,1,sheet.getLastRow()-1,12).getValues();
+  return rows.map(function(r){return{activity:r[0]||'',name:r[1]||'',price:r[2]||'',age:r[3]||'',duration:parseDuration(r[4]),complexity:r[5]||'',image:r[6]||'',description:r[8]||'',amount:parseAmount(r[9]),min:parseAmount(r[10]),access:String(r[11]||'').trim()};}).filter(function(e){return String(e.name).trim()!=='';});
 }
 function getBookingColumnMap(sheet){
   const h=sheet.getRange(1,1,1,Math.min(10,sheet.getLastColumn())).getValues()[0].map(function(x){return String(x||'').trim().toLowerCase();});
@@ -148,6 +149,68 @@ function readBookings(sheet){
 }
 function normalizeStatus(v){return String(v||'').trim()||'active';}
 function resolveTelegramName(data){const username=String(data.telegramName||data.username||'').trim();if(username)return username.charAt(0)==='@'?username:'@'+username;return String(data.name||'').trim().replace(/^@/,'');}
+
+function bookingAccessLevels_(value){
+  return String(value??'')
+    .split(/[,;\\n]/)
+    .map(function(item){return item.trim();})
+    .filter(Boolean);
+}
+
+function bookingGetAccess_(telegramId){
+  const url=ACCESS_API_URL
+    +'?action=user'
+    +'&telegram_id='+encodeURIComponent(String(telegramId))
+    +'&ts='+Date.now();
+
+  const response=UrlFetchApp.fetch(url,{
+    method:'get',
+    muteHttpExceptions:true,
+    followRedirects:true
+  });
+
+  const code=response.getResponseCode();
+  const text=response.getContentText();
+
+  if(code<200||code>=300){
+    throw Error('Access API вернул HTTP '+code+'.');
+  }
+
+  let data;
+  try{
+    data=JSON.parse(text);
+  }catch(e){
+    throw Error('Access API вернул не JSON.');
+  }
+
+  if(!data.ok){
+    throw Error(data.error||'Не удалось получить доступ пользователя.');
+  }
+
+  return data;
+}
+
+function bookingEventHasAccess_(telegramId,event){
+  const requiredLevels=bookingAccessLevels_(event&&event.access);
+
+  // Пустая L = базовый ивент, доступный всем.
+  if(!requiredLevels.length)return true;
+
+  const access=bookingGetAccess_(telegramId);
+
+  // Полный доступ видит всё.
+  if(access.fullAccess)return true;
+
+  const allowed=new Set(
+    Array.isArray(access.allowedLevelIds)
+      ? access.allowedLevelIds.map(function(item){return String(item).trim();}).filter(Boolean)
+      : []
+  );
+
+  return requiredLevels.some(function(levelId){
+    return allowed.has(levelId);
+  });
+}
 
 function findEventByIdentity(events,activity,name){const a=String(activity||'').trim(),n=String(name||'').trim(),matches=events.filter(function(e){return String(e.name).trim()===n;});if(a){const exact=matches.filter(function(e){return String(e.activity).trim()===a;});if(exact.length===1)return exact[0];}if(matches.length===1)return matches[0];return null;}
 function findEventForBooking(b){const ss=getBookingSpreadsheet(),sheet=ss.getSheetByName(EVENTS_SHEET_NAME),events=readEvents(sheet),exact=findEventByIdentity(events,b.activity,b.name);if(exact)return exact;const parsed=parseBookingSlotId(b.slotId)||parseOldSlotId(b.slotId);if(parsed)return findEventByIdentity(events,parsed.activity,parsed.eventName);return null;}

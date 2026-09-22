@@ -25,6 +25,7 @@ const calendarPrompt=document.getElementById('calendar-prompt');
 const activityLegend=document.getElementById('activity-legend');
 let activities=[];
 let events=[];
+let allEvents=[];
 let accessLevelIds=new Set();
 let accessFull=false;
 let calendarEvents=[];
@@ -114,6 +115,32 @@ function bookingEventHasAccess(event){
   // Достаточно совпадения хотя бы с одним Level ID.
   return requiredLevels.some(levelId=>accessLevelIds.has(levelId));
 }
+
+function activityFullyLocked(key){
+  const activityKey=norm(key);
+  const activityEvents=allEvents.filter(event=>norm(event.activity)===activityKey);
+  if(!activityEvents.length)return false;
+  return !activityEvents.some(bookingEventHasAccess);
+}
+
+function openAccessLockedModal(key){
+  const modal=document.getElementById('access-locked-modal');
+  const title=document.getElementById('access-locked-title');
+  if(!modal)return;
+
+  const activity=activityByKey(key);
+  if(title){
+    title.textContent=activity?.title
+      ? `Ещё немного — и можно 🖤`
+      : 'Ещё немного — и можно 🖤';
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeAccessLockedModal(){
+  document.getElementById('access-locked-modal')?.classList.add('hidden');
+}
 function pad(n){return String(n).padStart(2,'0');}
 function dateText(d){return d.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'short',timeZone:'Asia/Yekaterinburg'}).replace(' г.','');}
 function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
@@ -171,8 +198,38 @@ function bookingEventsForCell(date,hour){return calendarEventsForCell(date,hour)
 function blockEventsForCell(date,hour){return calendarEventsForCell(date,hour).filter(event=>norm(event.title)!=='свободно'&&!event.isBooking);}
 function bookingEventName(event){const title=String(event?.title||'').trim();const parts=title.split('—');return parts.length>1?parts.slice(1).join('—').trim():title;}
 function bookingEventOccupancy(event){const text=String(event?.description||'');const matches=[...(text.matchAll(/(\d+)\s*\/\s*(\d+)\s*$/gm))];if(!matches.length)return null;const m=matches[matches.length-1];return{occupied:Number(m[1]),capacity:Number(m[2])};}
-function bookingEventJoinable(event){if(!event?.isBooking||eventHasStarted(event))return false;const occupancy=bookingEventOccupancy(event);if(!occupancy||occupancy.capacity<=occupancy.occupied)return false;return true;}
-function compatibleBookingEvents(date,hour,context=selectedCalendar){const targetActivity=context?.activity||'';const targetName=context?.name||'';return bookingEventsForCell(date,hour).filter(event=>{const eventData=eventForContext({activity:targetActivity,name:bookingEventName(event)});if(!eventData)return false;if(targetActivity&&norm(eventData.activity)!==norm(targetActivity))return false;if(targetName&&norm(bookingEventName(event))!==norm(targetName))return false;return true;});}
+function bookingEventJoinable(event){
+  if(!event?.isBooking||eventHasStarted(event))return false;
+
+  const eventData=eventForContext({
+    activity:selectedCalendar.activity,
+    name:bookingEventName(event)
+  });
+
+  if(!eventData||!bookingEventHasAccess(eventData))return false;
+
+  const occupancy=bookingEventOccupancy(event);
+  if(!occupancy||occupancy.capacity<=occupancy.occupied)return false;
+
+  return true;
+}
+function compatibleBookingEvents(date,hour,context=selectedCalendar){
+  const targetActivity=context?.activity||'';
+  const targetName=context?.name||'';
+
+  return bookingEventsForCell(date,hour).filter(event=>{
+    const eventData=eventForContext({
+      activity:targetActivity,
+      name:bookingEventName(event)
+    });
+
+    if(!eventData||!bookingEventHasAccess(eventData))return false;
+    if(targetActivity&&norm(eventData.activity)!==norm(targetActivity))return false;
+    if(targetName&&norm(bookingEventName(event))!==norm(targetName))return false;
+
+    return true;
+  });
+}
 function cellHasWorkingHour(date,hour,context=selectedCalendar){return freeEventsForCell(date,hour).length>0||compatibleBookingEvents(date,hour,context).length>0;}
 function intervalEvents(date,start,end,selector){const result=[];for(let m=start;m<end;m+=60){const hour=Math.floor(m/60);result.push({hour,matches:selector(date,hour)});}return result;}
 function intervalCapacity(date,start,end,context=selectedCalendar){const event=eventForContext(context);const capacity=Number(event?.amount);let minFree=Number.isFinite(capacity)?Math.max(0,capacity):0;let hasOccupancy=false;for(const part of intervalEvents(date,start,end,(d,h)=>compatibleBookingEvents(d,h,context))){const occupancy=part.matches.reduce((sum,event)=>sum+Math.max(0,bookingEventOccupancy(event)?.occupied||0),0);hasOccupancy=hasOccupancy||occupancy>0;minFree=Math.min(minFree,Math.max(0,capacity-occupancy));}const configuredMin=event?.min;if(hasOccupancy)return{capacity,free:minFree,minTickets:1};return{capacity,free:minFree,minTickets:configuredMin};}
@@ -195,7 +252,7 @@ async function loadEvents(){
     if(!r.ok)throw Error(`Ошибка Google Таблицы: ${r.status}`);
     const j=parse(await r.text());
 
-    events=(j.table.rows||[])
+    allEvents=(j.table.rows||[])
       .map((x,i)=>{
         const c=x.c||[];
         return{
@@ -213,10 +270,12 @@ async function loadEvents(){
           index:i
         };
       })
-      .filter(x=>x.activity&&x.name)
-      .filter(bookingEventHasAccess);
+      .filter(x=>x.activity&&x.name);
+
+    events=allEvents.filter(bookingEventHasAccess);
   }catch(e){
     console.error('Ошибка загрузки ивентов:',e);
+    allEvents=[];
     events=[];
   }
 
@@ -311,7 +370,28 @@ function renderActivityLegend(){if(!activityLegend)return;const base='<span><i c
 function updateCalendarPrompt(){if(!calendarPrompt)return;const event=selectedEvent();if(selectedCalendar.name&&event){calendarPrompt.textContent=event.name;calendarPrompt.className='calendar-prompt';calendarPrompt.setAttribute('style',activityStyle(activityColor(selectedCalendar.activity)).replace(/^ /,''));}else{calendarPrompt.textContent='Выберите ↑';calendarPrompt.className='calendar-prompt';}}
 function openActivity(key){const activity=activityByKey(key);if(!activity)return;activityTitle.textContent=activity.title;activityDescription.textContent=activity.description;if(activity.image){activityImage.src=activity.image;activityImage.alt=activity.title;activityImageWrap.classList.remove('hidden');}else activityImageWrap.classList.add('hidden');activityModal.classList.remove('hidden');}
 function stars(v){const n=Math.max(0,Math.min(5,parseInt(v,10)||0));return[1,2,3,4,5].map(i=>`<span class="complexity-star${i>5-n?' filled':''}">★</span>`).join('');}
-function openEventChooser(key){key=String(key||'').trim();const activity=activityByKey(key);if(!activity)return;const list=events.filter(x=>norm(x.activity)===norm(key));if(list.length===1){closeEvents();goToCalendar(key,list[0].name,true);return;}if(!list.length){closeEvents();goToCalendar(key,'',false);return;}eventsTitle.textContent=activity.title;eventsList.innerHTML=list.map((event,i)=>`<article class="event-card"><div class="event-image-wrap ${event.image?'':'empty'}">${event.image?`<img class="event-image" src="${esc(event.image)}" alt="${esc(event.name)}">`:'Фото пока нет'}<div class="event-overlay"><div class="event-text-block"><h3>${esc(event.name)}</h3><strong class="event-price">${esc(event.price||'—')} р</strong></div><div class="event-age"><strong>${esc(event.age||'—')}</strong></div><div class="event-duration"><strong>${esc(event.duration||'—')}</strong></div><div class="event-complexity"><strong class="complexity-stars">${stars(event.complexity)}</strong></div></div><div class="event-actions"><button class="event-details" type="button" data-i="${i}">Подробнее</button><button class="event-book" type="button" data-i="${i}">Записаться</button></div></div><div class="event-description hidden" data-i="${i}">${esc(event.description||'Описание пока придумываем')}</div></article>`).join('');eventsList.querySelectorAll('.event-details').forEach(button=>button.addEventListener('click',()=>{const description=eventsList.querySelector(`.event-description[data-i="${button.dataset.i}"]`);if(!description)return;const open=!description.classList.contains('hidden');description.classList.toggle('hidden');button.textContent=open?'Подробнее':'Свернуть';}));eventsList.querySelectorAll('.event-book').forEach(button=>button.addEventListener('click',()=>{const event=list[Number(button.dataset.i)];closeEvents();goToCalendar(key,event?.name||'',true);}));eventsModal.classList.remove('hidden');}
+function openEventChooser(key){
+  key=String(key||'').trim();
+  const activity=activityByKey(key);
+  if(!activity)return;
+
+  if(activityFullyLocked(key)){
+    closeEvents();
+    openAccessLockedModal(key);
+    return;
+  }
+
+  const list=events.filter(x=>norm(x.activity)===norm(key));
+  if(list.length===1){
+    closeEvents();
+    goToCalendar(key,list[0].name,true);
+    return;
+  }
+  if(!list.length){
+    closeEvents();
+    goToCalendar(key,'',false);
+    return;
+  }eventsTitle.textContent=activity.title;eventsList.innerHTML=list.map((event,i)=>`<article class="event-card"><div class="event-image-wrap ${event.image?'':'empty'}">${event.image?`<img class="event-image" src="${esc(event.image)}" alt="${esc(event.name)}">`:'Фото пока нет'}<div class="event-overlay"><div class="event-text-block"><h3>${esc(event.name)}</h3><strong class="event-price">${esc(event.price||'—')} р</strong></div><div class="event-age"><strong>${esc(event.age||'—')}</strong></div><div class="event-duration"><strong>${esc(event.duration||'—')}</strong></div><div class="event-complexity"><strong class="complexity-stars">${stars(event.complexity)}</strong></div></div><div class="event-actions"><button class="event-details" type="button" data-i="${i}">Подробнее</button><button class="event-book" type="button" data-i="${i}">Записаться</button></div></div><div class="event-description hidden" data-i="${i}">${esc(event.description||'Описание пока придумываем')}</div></article>`).join('');eventsList.querySelectorAll('.event-details').forEach(button=>button.addEventListener('click',()=>{const description=eventsList.querySelector(`.event-description[data-i="${button.dataset.i}"]`);if(!description)return;const open=!description.classList.contains('hidden');description.classList.toggle('hidden');button.textContent=open?'Подробнее':'Свернуть';}));eventsList.querySelectorAll('.event-book').forEach(button=>button.addEventListener('click',()=>{const event=list[Number(button.dataset.i)];closeEvents();goToCalendar(key,event?.name||'',true);}));eventsModal.classList.remove('hidden');}
 function closeEvents(){eventsModal.classList.add('hidden');}
 
 function renderCell(date,hour){
@@ -344,7 +424,14 @@ async function apiBook(slot,tickets,endTime=''){const currentUser=telegramUser()
 
 function closeActivity(){activityModal.classList.add('hidden');}
 modalClose?.addEventListener('click',closeActivity);modalOk?.addEventListener('click',closeActivity);eventsClose?.addEventListener('click',closeEvents);activityModal?.addEventListener('click',e=>{if(e.target===activityModal)closeActivity();});eventsModal?.addEventListener('click',e=>{if(e.target===eventsModal)closeEvents();});document.getElementById('error-modal')?.addEventListener('click',e=>{if(e.target.id==='error-modal')closeError();});document.getElementById('error-ok')?.addEventListener('click',closeError);
-document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;activityModal?.classList.add('hidden');eventsModal?.classList.add('hidden');bookingModal?.classList.add('hidden');closeError();});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  activityModal?.classList.add('hidden');
+  eventsModal?.classList.add('hidden');
+  bookingModal?.classList.add('hidden');
+  closeAccessLockedModal();
+  closeError();
+});
 
 renderCalendarSkeleton();
 calendar.addEventListener('scroll',handleCalendarScroll,true);

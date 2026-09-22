@@ -152,7 +152,7 @@ function resolveTelegramName(data){const username=String(data.telegramName||data
 
 function bookingAccessLevels_(value){
   return String(value??'')
-    .split(/[,;\\n]/)
+    .split(/[,;\n]/)
     .map(function(item){return item.trim();})
     .filter(Boolean);
 }

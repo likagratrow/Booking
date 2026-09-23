@@ -237,23 +237,22 @@ function bookingEventHasAccess_(access,event){
 
 function bookingAssignedLevelId_(access){
   if(access&&access.fullAccess)return 'all';
-  const allowed=Array.isArray(access&&access.allowedLevelIds)
-    ? access.allowedLevelIds.map(function(item){return String(item).trim();}).filter(Boolean)
-    : [];
-  if(allowed.length)return allowed[0];
-  throw Error('Access API не вернул уровень доступа пользователя.');
+  const levelId=String(access&&access.levelId||'').trim().toLowerCase();
+  return levelId||'base';
 }
 
 function bookingGroupAllows_(access,groupAccess){
   const groupId=String(groupAccess||'').trim();
   if(!groupId)return false;
   if(access&&access.fullAccess)return true;
+  if(groupId.toLowerCase()==='all')return true;
   const allowed=new Set(
     Array.isArray(access&&access.allowedLevelIds)
-      ? access.allowedLevelIds.map(function(item){return String(item).trim();}).filter(Boolean)
+      ? access.allowedLevelIds.map(function(item){return String(item).trim().toLowerCase();}).filter(Boolean)
       : []
   );
-  return allowed.has(groupId);
+  if(access&&access.basic)allowed.add('base');
+  return allowed.has(groupId.toLowerCase());
 }
 
 function getCalendarBookingGroupAccess(items,start,end,event){

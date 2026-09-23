@@ -98,7 +98,7 @@ function createBooking(data){
     const event=findEventByIdentity(events,activity,eventName);if(!event)throw Error('Выбранное мероприятие не найдено.');
     const userAccess=bookingGetAccess_(telegramId);
     if(!bookingEventHasAccess_(userAccess,event))throw Error('У вас нет доступа к этому мероприятию.');
-    const userLevelId=bookingResolveLevelId_(userAccess);
+    const userLevelId=bookingAssignedLevelId_(userAccess);
     const start=parseBookingDateTime(date,time);if(start.getTime()<=Date.now())throw Error('Время начала этого слота уже прошло.');
     const capacity=getCapacity(event);if(capacity<1)throw Error('Для выбранного мероприятия не задана вместимость.');
     const calendar=readCalendarRange(getCalendarOffsetDays(start),1);
@@ -235,11 +235,13 @@ function bookingEventHasAccess_(access,event){
   });
 }
 
-function bookingResolveLevelId_(access){
+function bookingAssignedLevelId_(access){
   if(access&&access.fullAccess)return 'all';
-  const value=String(access&&access.levelId||'').trim();
-  if(value)return value;
-  throw Error('Access API не вернул levelId пользователя.');
+  const allowed=Array.isArray(access&&access.allowedLevelIds)
+    ? access.allowedLevelIds.map(function(item){return String(item).trim();}).filter(Boolean)
+    : [];
+  if(allowed.length)return allowed[0];
+  throw Error('Access API не вернул уровень доступа пользователя.');
 }
 
 function bookingGroupAllows_(access,groupAccess){
@@ -337,7 +339,6 @@ function syncDiogenCalendarBooking(event,start,end,bookings,operation){
         ce=free[0];
         state={entries:[],occupancy:0,capacity:getCapacity(event)};
       }
-      if(state.access&&!bookingGroupAllows_(bookingGetAccess_(operation.telegramId||''),state.access))throw Error('У вас нет доступа к этой группе.');
       if(state.occupancy+Number(operation.tickets)>state.capacity)throw Error('В одном из выбранных часов свободно только '+Math.max(0,state.capacity-state.occupancy)+' мест.');
       if(!state.access)state.access=String(operation.accessLevel||'').trim();
       states.push({hour:h,event:ce,state:state});

@@ -91,14 +91,15 @@ async function loadBookingAccess(){
 
     accessLevelIds=new Set(
       Array.isArray(data.allowedLevelIds)
-        ? data.allowedLevelIds.map(item=>String(item).trim()).filter(Boolean)
+        ? data.allowedLevelIds.map(item=>String(item).trim().toLowerCase()).filter(Boolean)
         : []
     );
+    if(data.basic)accessLevelIds.add('base');
 
     accessFull=Boolean(data.fullAccess);
   }catch(error){
     console.warn('Не удалось получить доступ пользователя. Используется базовый доступ:',error);
-    accessLevelIds=new Set();
+    accessLevelIds=new Set(['base']);
     accessFull=false;
   }
 }
@@ -199,7 +200,7 @@ function blockEventsForCell(date,hour){return calendarEventsForCell(date,hour).f
 function bookingEventName(event){const title=String(event?.title||'').trim();const parts=title.split('—');return parts.length>1?parts.slice(1).join('—').trim():title;}
 function bookingEventOccupancy(event){const text=String(event?.description||'');const matches=[...(text.matchAll(/(\d+)\s*\/\s*(\d+)\s*$/gm))];if(!matches.length)return null;const m=matches[matches.length-1];return{occupied:Number(m[1]),capacity:Number(m[2])};}
 function bookingEventGroupAccess(event){const match=String(event?.description||'').match(/^ACCESS:([A-Za-z0-9_-]+)$/m);return match?String(match[1]).trim():'';}
-function bookingEventGroupHasAccess(event){const groupAccess=bookingEventGroupAccess(event);if(!groupAccess)return false;if(accessFull)return true;return accessLevelIds.has(groupAccess);}
+function bookingEventGroupHasAccess(event){const groupAccess=bookingEventGroupAccess(event);if(!groupAccess)return false;if(accessFull)return true;if(groupAccess.toLowerCase()==='all')return true;return accessLevelIds.has(groupAccess.toLowerCase());}
 function bookingEventJoinable(event){
   if(!event?.isBooking||eventHasStarted(event))return false;
   if(!bookingEventGroupHasAccess(event))return false;

@@ -131,7 +131,7 @@ function createBooking(data){
     const newBooking={id:id,telegramId:telegramId,telegramName:telegramName,activity:String(event.activity).trim(),name:String(event.name).trim(),date:date,time:time,tickets:tickets,status:'active',slotId:slotId,access:userLevelId};
     bs.appendRow([id,telegramId,telegramName,String(event.activity).trim(),String(event.name).trim(),date,time,tickets,'active',slotId,userLevelId]);
     const row=bs.getLastRow(),updated=bookings.concat([newBooking]);
-    try{syncCalendarBooking(event,start,end,updated,{action:'book',bookingId:id,tickets:tickets,telegramName:telegramName,activityKey:activity,accessLevel:groupAccess});}catch(e){try{bs.deleteRow(row);}catch(x){Logger.log(x.message);}throw e;}
+    try{syncCalendarBooking(event,start,end,updated,{action:'book',bookingId:id,telegramId:telegramId,tickets:tickets,telegramName:telegramName,activityKey:activity,accessLevel:groupAccess});}catch(e){try{bs.deleteRow(row);}catch(x){Logger.log(x.message);}throw e;}
     clearCalendarCache();
     const slotBookings=getBookingsForExactSlot(updated,start,event),occupied=calculateOccupancy(slotBookings);
     return {ok:true,booking:{id:id,telegramId:telegramId,telegramName:telegramName,activity:event.activity,name:event.name,date:date,time:time,endTime:formatTime(end),tickets:tickets,status:'active',slotId:slotId},slot:{slotId:slotId,start:formatDateTime(start),end:formatDateTime(end),capacity:capacity,occupied:occupied,free:Math.max(0,capacity-occupied)}};
